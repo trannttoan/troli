@@ -247,6 +247,10 @@ Signing out clears authentication tokens. Conversation history is retained so it
 
 ## 15. Open Questions
 
-| # | Question | Status |
+None at this time. All questions have been resolved.
+
+## 16. Resolved Questions (continued)
+
+| # | Question | Resolution |
 |---|---|---|
-| 1 | Which LLM to start with? GPT-4o or Claude Sonnet? Both work. Try both during prototyping and pick based on tool-calling accuracy and cost. | Open |
+| 6 | Which LLM to start with? | Gemini 2.5 Flash-Lite for v1.0. Best cost-to-capability ratio for a tool-calling conversational agent. Architecture is provider-agnostic — can swap to GPT-4o or Claude Sonnet with a one-line config change. |

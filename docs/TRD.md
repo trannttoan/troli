@@ -126,23 +126,28 @@ The client communicates with the backend via two patterns:
 LangGraph.js is model-agnostic. The LLM is injected at configuration time.
 
 ```typescript
-// OpenAI
+// Google (v1.0)
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+const model = new ChatGoogleGenerativeAI({ model: "gemini-2.5-flash-lite", temperature: 0 });
+
+// OpenAI (alternative)
 import { ChatOpenAI } from "@langchain/openai";
 const model = new ChatOpenAI({ model: "gpt-4o", temperature: 0 });
 
-// OR Anthropic
+// Anthropic (alternative)
 import { ChatAnthropic } from "@langchain/anthropic";
 const model = new ChatAnthropic({ model: "claude-sonnet-4-6", temperature: 0 });
 ```
 
-Switching providers is a one-line change. Both `@langchain/openai` and `@langchain/anthropic` implement the same `BaseChatModel` interface.
+All three providers implement the same `BaseChatModel` interface. Switching providers is a one-line change — no refactoring required.
 
 **Model selection strategy:**
 
 | Phase | Model Strategy |
 |---|---|
-| v1.0 Development | Start with GPT-4o or Claude Sonnet. Both have strong tool-calling support. Try both during prototyping. |
-| Cost Optimization | Explore GPT-4o-mini or Claude Haiku for simple routing/classification. Capable model only for complex reasoning. |
+| v1.0 Development | Gemini 2.5 Flash-Lite. Best cost-to-capability ratio for a tool-calling conversational agent. |
+| Fallback | GPT-4o or Claude Sonnet if Flash-Lite's tool-calling accuracy proves insufficient. Swap is a one-line config change. |
+| Cost Optimization | Evaluate dual-model routing: cheap model for simple reads, capable model for complex reasoning and writes. |
 | Future | Evaluate open-source models (Llama, Mistral) via Ollama for self-hosted inference. |
 
 ### 3.3 Agent Graph
@@ -500,7 +505,7 @@ typescript
 ```
 @langchain/langgraph
 @langchain/core
-@langchain/openai (and/or @langchain/anthropic)
+@langchain/google-genai (v1.0; swap to @langchain/openai or @langchain/anthropic if needed)
 @langgraphjs/toolkit
 zod (tool parameter validation)
 typescript
@@ -511,7 +516,7 @@ typescript
 | Service | Purpose | Free Tier |
 |---|---|---|
 | Google Cloud | OAuth + Calendar/Tasks/Gmail APIs | Free for personal use |
-| OpenAI or Anthropic | LLM API | Pay per token |
+| Google AI (Gemini) | LLM API (v1.0: Gemini 2.5 Flash-Lite) | Free tier available; pay per token beyond |
 | LangGraph Cloud | Agent hosting | Free tier available for development |
 | LangSmith | Tracing and observability | Free tier available |
 
@@ -550,9 +555,8 @@ typescript
 | 1 | How to handle the 7-day message pruning? Background job, or inline? | Inline — prune in the graph, not in storage. A preprocessing step filters messages to the past 7 days before passing them to the LLM. Full history stays in PostgreSQL for debugging and future profile building (post-v1.0). See Section 3.7. |
 | 2 | Should the backend validate the Google access token proactively, or let tools fail and handle 401s reactively? | Hybrid. The backend validates the Google access token proactively via tokeninfo on each request (for authentication and thread authorization — see Section 8). Google API 401s from tools are still handled reactively as a fallback for edge cases (mid-request token revocation). The tool returns a typed error so the client knows to trigger re-auth. |
 | 3 | Can LangGraph Cloud handle custom message pruning? | Not needed. Pruning happens at the graph level (a state reducer filters messages before the LLM sees them), not at the storage level. This works on any infrastructure — LangGraph Cloud, AWS, whatever. See Section 3.7. |
+| 4 | GPT-4o or Claude Sonnet? | Gemini 2.5 Flash-Lite for v1.0. Best cost-to-capability ratio. The architecture is provider-agnostic via LangChain's `BaseChatModel` interface — swapping to GPT-4o or Claude Sonnet is a one-line config change if Flash-Lite's tool-calling accuracy proves insufficient. See Section 3.2. |
 
 ## 12. Open Technical Questions
 
-| # | Question | Status |
-|---|---|---|
-| 1 | GPT-4o or Claude Sonnet? Need to test both for tool-calling accuracy. | Open |
+None at this time. All questions have been resolved.
