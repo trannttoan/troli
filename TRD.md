@@ -45,7 +45,7 @@ The client never calls Google APIs directly. It passes the user's OAuth access t
 | Auth Library | `expo-auth-session` (Google OAuth 2.0 with PKCE) |
 | Token Storage | `expo-secure-store` (Keychain, `AFTER_FIRST_UNLOCK`) |
 | HTTP Client | `fetch` with SSE support for streaming |
-| State Management | TBD (Zustand or React Context — lightweight, no Redux) |
+| State Management | Zustand (selective subscriptions, works outside React components for auth logic) |
 
 ### 2.2 Authentication
 
@@ -91,15 +91,17 @@ Simple chat bubble layout:
 - Agent responses stream in token-by-token via SSE.
 - When the agent proposes an update or delete, an approval card renders inline in the message list. The card has Approve and Reject buttons. Tapping either sends a resume command to the backend.
 - A loading/typing indicator shows while the agent is processing.
-- The input bar is fixed at the bottom with a text field and send button.
+- The input bar is fixed at the bottom with a text field and send button. The input bar is disabled while the agent is processing; re-enabled after the response completes or the user resolves an approval card.
 
 ### 2.5 Backend Communication
 
 The client communicates with the backend via two patterns:
 
-**Sending a message:** POST to `/threads/{thread_id}/runs` with the user's message and access token. The backend responds with an SSE stream of agent output.
+**Sending a message:** POST to `/threads/{thread_id}/runs` with the user's message and access token. The response is an SSE stream of agent output. The stream uses typed events — regular tokens arrive as `events` payloads, and when the agent hits an interrupt (HITL), the stream ends with the thread in `interrupted` status. The client detects this by checking the thread state after stream completion and renders the approval card from the interrupt payload.
 
-**Resuming after HITL interrupt:** POST to `/threads/{thread_id}/runs` with a `Command(resume=...)` payload containing the user's decision (approve or reject).
+**Resuming after HITL interrupt:** POST to `/threads/{thread_id}/runs` with a `Command(resume=...)` payload containing the user's decision (approve or reject). The response is again an SSE stream.
+
+**Timezone:** The client reads the device timezone via `expo-localization` (`getCalendars()[0].timeZone`) and sends it with each request. The backend injects it into the system prompt so the agent interprets relative dates correctly.
 
 **Thread management:** Each user has a single thread. The thread ID is derived from or mapped to the user's Google account email. On first login, the client creates a thread. On subsequent launches, it resumes the existing thread.
 
@@ -191,9 +193,9 @@ Each Google API operation is a LangGraph tool defined with Zod schemas. Tools ar
 |---|---|---|---|
 | `list_calendar_events` | Read | Auto | `timeMin`, `timeMax`, `query` (optional) |
 | `get_calendar_event` | Read | Auto | `eventId` |
-| `create_calendar_event` | Write | Auto | `summary`, `startDateTime`, `endDateTime`, `location` (optional), `description` (optional) |
-| `update_calendar_event` | Write | Interrupt | `eventId`, plus any fields to update |
-| `delete_calendar_event` | Write | Interrupt | `eventId` |
+| `create_calendar_event` | Write | Auto | `summary`, `startDateTime`, `endDateTime`, `location` (optional), `description` (optional), `attendees` (optional, array of emails) |
+| `update_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single` or `all`, required for recurring events), plus any fields to update |
+| `delete_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single` or `all`, required for recurring events) |
 
 **Tasks tools:**
 
@@ -224,7 +226,7 @@ HITL uses LangGraph's `interrupt()` function. Write tools for update and delete 
 const update_calendar_event = tool(
   async ({ eventId, ...updates }, config) => {
     // Fetch current event for context
-    const current = await fetchEvent(eventId, config.accessToken);
+    const current = await fetchEvent(eventId, config.configurable.accessToken);
 
     // Pause for approval
     const decision = interrupt({
@@ -239,7 +241,7 @@ const update_calendar_event = tool(
     }
 
     // Execute the update
-    return await executeUpdate(eventId, updates, config.accessToken);
+    return await executeUpdate(eventId, updates, config.configurable.accessToken);
   },
   {
     name: "update_calendar_event",
@@ -283,6 +285,10 @@ Rules:
 - When the user asks you to create an event or task, do it directly.
 - When the user asks you to update or delete something, you'll be asked for
   approval before the change goes through. Show the user clearly what will change.
+- For recurring events: always ask whether the user wants to change a single
+  occurrence or all future occurrences before proposing the update or delete.
+- When the user asks to create a task without specifying a task list, ask which
+  list to use.
 - Never fabricate event details, task content, or email content. Only report
   what the APIs return.
 - If the user's request is ambiguous (e.g., "schedule a meeting" without a
@@ -291,11 +297,9 @@ Rules:
   relevant details.
 - For Gmail searches, use Gmail query syntax internally but speak naturally
   to the user.
-
-{user_profile_section}
 ```
 
-The timezone, current date/time, and user profile are injected dynamically. The `{user_profile_section}` is either the serialized profile facts or omitted entirely if the user has disabled memory.
+The timezone is read from the device via `expo-localization` and sent by the client with each request. The current date/time are computed server-side from the user's timezone.
 
 ### 3.7 Thread and Conversation Management
 
@@ -305,53 +309,26 @@ Each user has one thread, identified by a deterministic thread ID derived from t
 
 This approach is infrastructure-agnostic (works on LangGraph Cloud and AWS) and avoids any dependency on the hosting platform's pruning capabilities.
 
-**Implementation:** A state reducer or preprocessing node at the start of each agent run filters the `messages` array:
+**Implementation:** A preprocessing node at the start of each agent run filters the `messages` array. All messages must be timestamped at creation time. Messages without timestamps are dropped. A hard cap of 200 messages prevents unbounded context growth even within the 7-day window:
 
 ```typescript
+const MAX_MESSAGES = 200;
+
 function windowMessages(messages: BaseMessage[], windowDays: number = 7): BaseMessage[] {
   const cutoff = Date.now() - windowDays * 24 * 60 * 60 * 1000;
-  return messages.filter(msg => {
+  const windowed = messages.filter(msg => {
     const timestamp = msg.additional_kwargs?.timestamp;
-    return !timestamp || timestamp >= cutoff;
+    return timestamp != null && timestamp >= cutoff;
   });
+  return windowed.length > MAX_MESSAGES
+    ? windowed.slice(-MAX_MESSAGES)
+    : windowed;
 }
 ```
 
-### 3.8 User Profile (Agent Memory)
+### 3.8 User Profile (Agent Memory) — Deferred to Post-v1.0
 
-The user profile is a persistent, structured summary of key facts the agent has learned about the user. It survives the 7-day message window and is included in the system prompt so the agent always has context.
-
-**Storage:** The profile is stored as a JSON blob in the thread's metadata (or a separate key in the checkpointer's state). It is not part of the message array.
-
-**Profile structure:**
-
-```typescript
-interface UserProfile {
-  enabled: boolean;
-  facts: Array<{
-    category: "preference" | "habit" | "contact" | "context";
-    content: string;        // e.g., "Prefers morning meetings"
-    source: string;         // e.g., "Inferred from 3 scheduling requests"
-    createdAt: string;      // ISO timestamp
-    updatedAt: string;
-  }>;
-}
-```
-
-**How facts are extracted:** After each agent run, a lightweight post-processing step asks the LLM: "Based on this conversation, are there any new facts about the user worth remembering? Only extract preferences, habits, or recurring context. Do not store raw message content." The LLM returns structured facts that get merged into the profile.
-
-This is a separate, cheap LLM call (can use a smaller model like GPT-4o-mini or Haiku) so it doesn't add latency to the main conversation.
-
-**Profile injection:** The profile is serialized into the system prompt:
-
-```
-Things I know about you:
-- You prefer morning meetings (learned April 10)
-- Your default task list is "Work" (learned April 8)
-- You frequently email alex@company.com (learned April 12)
-```
-
-**Clearing the profile:** When the user taps "Clear Memory" in Settings, the client sends a request to the backend that resets the `UserProfile` to `{ enabled: true, facts: [] }`. When the user disables memory, the profile is still stored but not included in the system prompt.
+Agent memory is deferred to post-v1.0. In v1.0, the agent operates only with the current 7-day message window and has no persistent profile. See PRD Section 12 for the planned capability.
 
 ---
 
@@ -424,10 +401,16 @@ The backend exposes these endpoints to the mobile client. When using LangGraph C
 |---|---|---|
 | POST | `/threads` | Create a new thread for a user |
 | GET | `/threads/{thread_id}` | Get thread state (messages, status) |
-| POST | `/threads/{thread_id}/runs` | Send a user message or resume after HITL |
-| GET | `/threads/{thread_id}/runs/{run_id}/stream` | SSE stream of agent output |
+| POST | `/threads/{thread_id}/runs` | Send a user message or resume after HITL. Returns SSE stream. |
 
 The client includes the user's Google access token in the `Authorization` header of every request. The backend extracts it and passes it to tool functions for Google API calls.
+
+### 6.1 Sign-Out Flow
+
+1. Client clears all tokens from `expo-secure-store` (`auth_access_token`, `auth_refresh_token`, `auth_token_expiry`, `auth_user_email`).
+2. Client navigates to the sign-in screen.
+3. The thread ID is retained locally so the user can reconnect to the same conversation on re-auth.
+4. No backend call is needed — the backend holds no session state or tokens.
 
 ---
 
@@ -487,7 +470,8 @@ All Google API calls go through a shared `fetchWithAuth` function that:
 
 ## 8. Security Considerations
 
-- **Tokens never touch the backend's storage.** The client sends the Google access token per request. The backend uses it in-memory for the duration of that request and does not persist it.
+- **Client-to-backend authentication.** The backend validates the Google access token on each request by calling Google's tokeninfo endpoint (`https://oauth2.googleapis.com/tokeninfo?access_token=...`). This confirms the token is valid and extracts the user's email. For v1.0 (personal/test use), this is sufficient. For production scale, add a dedicated auth layer (e.g., short-lived JWT issued after token validation).
+- **Tokens never touch the backend's storage.** The client sends the Google access token per request. The backend passes it to tool functions via LangGraph's `config.configurable` (not graph state), which is not serialized by the checkpointer. The token exists only in memory for the duration of the request.
 - **Token refresh happens client-side only.** The backend never sees the refresh token.
 - **HTTPS everywhere.** All client-to-backend and backend-to-Google communication is over TLS.
 - **Thread isolation.** Each user's thread is identified by a hash of their email. There is no cross-user data access in v1.0 (single-user app).
@@ -530,7 +514,33 @@ typescript
 
 ---
 
-## 10. Resolved Technical Questions
+## 10. Testing Strategy
+
+### 10.1 Backend (Vitest)
+
+| Layer | What to Test | Approach |
+|---|---|---|
+| Tool unit tests | Each Google API tool in isolation | Mock `fetchWithAuth` responses. Verify correct API calls, parameter mapping, error handling. |
+| HITL flow | Interrupt/resume cycle for update and delete tools | Use LangGraph's test utilities to simulate interrupt and resume with approve/reject. |
+| Agent integration | Full graph execution for representative user queries | Mock all Google API responses. Assert the agent selects the correct tool with correct parameters. |
+| Message windowing | 7-day filter and hard cap | Unit test `windowMessages` with synthetic message arrays. |
+
+### 10.2 Mobile Client (React Native Testing Library)
+
+| Layer | What to Test | Approach |
+|---|---|---|
+| Components | Chat bubbles, approval cards, input bar | Render with test data. Verify approve/reject callbacks, disabled state during processing. |
+| Auth flow | Token storage, silent refresh, sign-out | Mock `expo-secure-store` and `expo-auth-session`. Verify token lifecycle. |
+| SSE handling | Stream parsing, interrupt detection | Mock SSE responses. Verify messages render incrementally and approval cards appear on interrupt. |
+
+### 10.3 Deferred to Post-v1.0
+
+- **E2E tests (Detox):** Full iOS simulator tests for critical flows (sign-in → send message → approve update). Complex setup; defer until the app stabilizes.
+- **Live Google API tests:** Integration tests against real Google APIs with a dedicated test account. Useful but requires careful setup to avoid polluting real calendars.
+
+---
+
+## 11. Resolved Technical Questions
 
 | # | Question | Resolution |
 |---|---|---|
@@ -538,7 +548,7 @@ typescript
 | 2 | Should the backend validate the Google access token proactively, or let tools fail and handle 401s reactively? | Reactive. The client handles token refresh and should almost always send a valid token. A 401 from a tool is an edge case (revoked account, expired refresh token). Not worth adding an extra HTTP roundtrip to every request. The tool returns a typed error so the client knows to trigger re-auth. |
 | 3 | Can LangGraph Cloud handle custom message pruning? | Not needed. Pruning happens at the graph level (a state reducer filters messages before the LLM sees them), not at the storage level. This works on any infrastructure — LangGraph Cloud, AWS, whatever. See Section 3.7. |
 
-## 11. Open Technical Questions
+## 12. Open Technical Questions
 
 | # | Question | Status |
 |---|---|---|

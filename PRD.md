@@ -68,6 +68,10 @@ Troli requests the narrowest scopes possible while supporting all v1.0 operation
 | Update event | Yes (approve/reject) | Agent shows what will change, user approves |
 | Delete event | Yes (approve/reject) | Agent confirms event name, user approves |
 
+**Recurring events:** When the user asks to change or delete a recurring event, the agent asks whether to modify a single occurrence or all future occurrences before proposing the update.
+
+**Attendees:** Event creation supports an optional list of attendee email addresses. The user must provide email addresses directly — name-to-email resolution (e.g., "invite Alex") is deferred to post-v1.0.
+
 ### 5.2 Google Tasks Operations
 
 | Operation | HITL Required | Notes |
@@ -78,6 +82,8 @@ Troli requests the narrowest scopes possible while supporting all v1.0 operation
 | Create task | No | Agent creates directly based on user's request |
 | Update task | Yes (approve/reject) | Includes marking as complete |
 | Delete task | Yes (approve/reject) | Agent confirms task name, user approves |
+
+**Task list disambiguation:** When the user creates a task without specifying a list, the agent asks which list to use.
 
 ### 5.3 Gmail Operations (Read-Only)
 
@@ -115,6 +121,7 @@ The v1.0 interface is a simple chat screen with message bubbles. Deliberately mi
 - Streaming response: agent tokens appear as they're generated, not after the full response is ready.
 - Approval cards: when the agent proposes an update or delete, a card appears in the chat with Approve and Reject buttons.
 - Loading indicator while the agent is thinking or executing a tool.
+- The input bar is disabled while the agent is processing a message. Re-enabled after the response completes or the user resolves an approval card.
 - Single continuous conversation thread per user. The thread keeps the past 7 days of messages. Older messages are pruned.
 
 ### 7.2 Conversation Examples
@@ -139,26 +146,13 @@ The v1.0 interface is a simple chat screen with message bubbles. Deliberately mi
 Accessible via a gear icon in the header. Contains:
 
 - **Google Account:** Shows connected email. Option to sign out and reconnect.
-- **Agent Memory:** Toggle on/off. When on, the agent remembers key facts about the user across conversations. A "View Memory" option shows what the agent has learned. A "Clear Memory" button wipes the profile.
 - **About / Version:** App version info.
 
 ---
 
-## 8. User Profile (Agent Memory)
+## 8. User Profile (Agent Memory) — Deferred to Post-v1.0
 
-The agent builds a persistent profile of the user over time, based on patterns it observes across conversations. This profile survives the 7-day message window — even after old messages drop out of the conversation, the agent retains key facts it has learned.
-
-**What gets remembered:** preferences, habits, and recurring context. For example: "User prefers morning meetings," "User's default task list is 'Work'," "User frequently emails alex@company.com," or "User's team standup is every Tuesday at 10am."
-
-**How it works:** After each conversation turn, the agent can update the profile with new observations. The profile is a structured summary, not a raw log of past messages. It's included in the system prompt so the agent has context even when the original conversation is gone.
-
-**User control:**
-- The user can toggle agent memory on or off in Settings.
-- The user can view what the agent remembers about them.
-- The user can clear the profile entirely at any time.
-- When memory is off, the agent only has context from the current 7-day conversation window.
-
-**Privacy:** The profile is stored on the backend, tied to the user's thread. It contains summarized observations, not raw message content. When the user clears it, the data is deleted permanently.
+Agent memory (persistent user profile across conversations) is deferred to post-v1.0. In v1.0, the agent only has context from the current 7-day conversation window. See the Post-v1.0 Roadmap for planned memory capabilities.
 
 ---
 
@@ -170,7 +164,7 @@ The agent builds a persistent profile of the user over time, based on patterns i
 2. User taps the button. Google OAuth consent screen appears, requesting Calendar, Tasks, Gmail, and profile scopes.
 3. In test mode, user clicks through the "unverified app" warning.
 4. User grants permissions. App receives tokens and stores them securely.
-5. App navigates to the chat screen. A welcome message from the agent introduces what it can do.
+5. App navigates to the chat screen.
 
 ### 9.2 Subsequent Launches
 
@@ -205,6 +199,7 @@ Signing out clears authentication tokens. Conversation history is retained so it
 - Multi-calendar support (v1.0 uses primary calendar only)
 - Offline mode
 - Google Drive, Docs, or Sheets integration
+- Agent memory / persistent user profile (deferred to post-v1.0)
 - HITL edit option for update operations (approve/reject only in v1.0)
 
 ---
@@ -213,6 +208,8 @@ Signing out clears authentication tokens. Conversation history is retained so it
 
 | Feature | Notes |
 |---|---|
+| Agent memory / user profile | Persistent profile of user preferences and habits across conversations. See deferred Section 8. |
+| Attendee name resolution | Resolve names like "Alex" to email addresses, likely via Google Contacts API. |
 | Gmail compose / send | Requires `gmail.compose` or `gmail.send` scope (both restricted). Same CASA audit requirement. |
 | HITL edit option | Let users modify proposed parameters via form fields before approving updates. |
 | Rich action cards in chat | Show calendar event previews, task cards, email snippets as interactive UI elements. |
@@ -246,7 +243,7 @@ Signing out clears authentication tokens. Conversation history is retained so it
 | 2 | Single thread or multiple threads? | Single continuous thread per user. Keep past 7 days of messages in the LLM's context window. |
 | 3 | App name? | Troli |
 | 4 | HITL edit option for updates? | Deferred to post-v1.0. Form fields is the planned approach. |
-| 5 | What happens when old messages expire? | The agent builds a persistent user profile that survives the 7-day window. Key facts and preferences are retained. The user can view, toggle, or clear this profile in Settings. |
+| 5 | What happens when old messages expire? | In v1.0, old messages simply fall out of the LLM's context window. Agent memory (persistent profile) is deferred to post-v1.0. |
 
 ## 15. Open Questions
 
