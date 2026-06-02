@@ -122,7 +122,7 @@ The v1.0 interface is a simple chat screen with message bubbles. Deliberately mi
 - Approval cards: when the agent proposes an update or delete, a card appears in the chat with Approve and Reject buttons.
 - Loading indicator while the agent is thinking or executing a tool.
 - The input bar is disabled while the agent is processing a message. Re-enabled after the response completes or the user resolves an approval card.
-- Single continuous conversation thread per user. The thread keeps the past 7 days of messages. Older messages are pruned.
+- Single continuous conversation thread per user. The LLM sees the past 7 days of messages. Older messages are retained in storage but not included in the conversation context.
 
 ### 7.2 Conversation Examples
 

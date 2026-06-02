@@ -11,7 +11,7 @@
 
 Troli is split into two components: a React Native mobile client and a Node.js backend running the LangGraph.js agent. The mobile client handles authentication and the chat UI. The backend handles LLM calls, tool execution, state persistence, and Google API calls.
 
-The client never calls Google APIs directly. It passes the user's OAuth access token to the backend with each request. The backend uses that token to make Google API calls on the user's behalf.
+The client never calls Google product APIs (Calendar, Tasks, Gmail) directly. OAuth endpoints (token exchange, userinfo) are called client-side during authentication. For all product-data operations, the client passes the user's OAuth access token to the backend with each request, and the backend uses that token to make Google API calls on the user's behalf.
 
 ```
 ┌──────────────────────┐         ┌──────────────────────────────────┐
@@ -193,8 +193,8 @@ Each Google API operation is a LangGraph tool defined with Zod schemas. Tools ar
 |---|---|---|---|
 | `list_calendar_events` | Read | Auto | `timeMin`, `timeMax`, `query` (optional) |
 | `get_calendar_event` | Read | Auto | `eventId` |
-| `create_calendar_event` | Write | Auto | `summary`, `startDateTime`, `endDateTime`, `location` (optional), `description` (optional), `attendees` (optional, array of emails) |
-| `update_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single` or `all`, required for recurring events), plus any fields to update |
+| `create_calendar_event` | Write | Auto | `summary`, `startDateTime`, `endDateTime`, `startDate` (optional, YYYY-MM-DD for all-day), `endDate` (optional, YYYY-MM-DD for all-day), `location` (optional), `description` (optional), `attendees` (optional, array of emails) |
+| `update_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single` or `all`, required for recurring events), plus any fields to update (including `startDate`/`endDate` for all-day events) |
 | `delete_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single` or `all`, required for recurring events) |
 
 **Tasks tools:**
@@ -213,6 +213,7 @@ Each Google API operation is a LangGraph tool defined with Zod schemas. Tools ar
 | Tool Name | Type | HITL | Parameters |
 |---|---|---|---|
 | `search_gmail` | Read | Auto | `query` (Gmail search syntax), `maxResults` |
+| `search_gmail_threads` | Read | Auto | `query` (Gmail search syntax), `maxResults` |
 | `get_gmail_message` | Read | Auto | `messageId` |
 | `get_gmail_thread` | Read | Auto | `threadId` |
 | `list_gmail_labels` | Read | Auto | None |
@@ -251,6 +252,8 @@ const update_calendar_event = tool(
       summary: z.string().optional(),
       startDateTime: z.string().optional(),
       endDateTime: z.string().optional(),
+      startDate: z.string().optional(), // YYYY-MM-DD for all-day events
+      endDate: z.string().optional(),   // YYYY-MM-DD for all-day events
       location: z.string().optional(),
       description: z.string().optional(),
     }),
@@ -470,7 +473,7 @@ All Google API calls go through a shared `fetchWithAuth` function that:
 
 ## 8. Security Considerations
 
-- **Client-to-backend authentication.** The backend validates the Google access token on each request by calling Google's tokeninfo endpoint (`https://oauth2.googleapis.com/tokeninfo?access_token=...`). This confirms the token is valid and extracts the user's email. For v1.0 (personal/test use), this is sufficient. For production scale, add a dedicated auth layer (e.g., short-lived JWT issued after token validation).
+- **Client-to-backend authentication.** The backend validates the Google access token on each request by calling Google's tokeninfo endpoint (`https://oauth2.googleapis.com/tokeninfo?access_token=...`). This confirms the token is valid and extracts the user's email. The backend then verifies that the requested `thread_id` matches `troli-{sha256(email)}` — if not, the request is rejected with 403. This ensures users can only access their own thread. For production scale, add a dedicated auth layer (e.g., short-lived JWT issued after token validation).
 - **Tokens never touch the backend's storage.** The client sends the Google access token per request. The backend passes it to tool functions via LangGraph's `config.configurable` (not graph state), which is not serialized by the checkpointer. The token exists only in memory for the duration of the request.
 - **Token refresh happens client-side only.** The backend never sees the refresh token.
 - **HTTPS everywhere.** All client-to-backend and backend-to-Google communication is over TLS.
@@ -544,8 +547,8 @@ typescript
 
 | # | Question | Resolution |
 |---|---|---|
-| 1 | How to handle the 7-day message pruning? Background job, or inline? | Inline — prune in the graph, not in storage. A preprocessing step filters messages to the past 7 days before passing them to the LLM. Full history stays in PostgreSQL for profile building and debugging. See Section 3.7. |
-| 2 | Should the backend validate the Google access token proactively, or let tools fail and handle 401s reactively? | Reactive. The client handles token refresh and should almost always send a valid token. A 401 from a tool is an edge case (revoked account, expired refresh token). Not worth adding an extra HTTP roundtrip to every request. The tool returns a typed error so the client knows to trigger re-auth. |
+| 1 | How to handle the 7-day message pruning? Background job, or inline? | Inline — prune in the graph, not in storage. A preprocessing step filters messages to the past 7 days before passing them to the LLM. Full history stays in PostgreSQL for debugging and future profile building (post-v1.0). See Section 3.7. |
+| 2 | Should the backend validate the Google access token proactively, or let tools fail and handle 401s reactively? | Hybrid. The backend validates the Google access token proactively via tokeninfo on each request (for authentication and thread authorization — see Section 8). Google API 401s from tools are still handled reactively as a fallback for edge cases (mid-request token revocation). The tool returns a typed error so the client knows to trigger re-auth. |
 | 3 | Can LangGraph Cloud handle custom message pruning? | Not needed. Pruning happens at the graph level (a state reducer filters messages before the LLM sees them), not at the storage level. This works on any infrastructure — LangGraph Cloud, AWS, whatever. See Section 3.7. |
 
 ## 12. Open Technical Questions
