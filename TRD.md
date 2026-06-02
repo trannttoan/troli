@@ -97,7 +97,7 @@ Simple chat bubble layout:
 
 The client communicates with the backend via two patterns:
 
-**Sending a message:** POST to `/threads/{thread_id}/runs` with the user's message and access token. The response is an SSE stream of agent output. The stream uses typed events — regular tokens arrive as `events` payloads, and when the agent hits an interrupt (HITL), the stream ends with the thread in `interrupted` status. The client detects this by checking the thread state after stream completion and renders the approval card from the interrupt payload.
+**Sending a message:** POST to `/threads/{thread_id}/runs` with the user's message and access token. The response is an SSE stream of agent output. The stream uses typed events — regular tokens arrive as `events` payloads. When the agent hits an interrupt (HITL), the interrupt payload is included in the stream and the stream ends with the thread in `interrupted` status. The client renders the approval card from the interrupt payload in the stream.
 
 **Resuming after HITL interrupt:** POST to `/threads/{thread_id}/runs` with a `Command(resume=...)` payload containing the user's decision (approve or reject). The response is again an SSE stream.
 
@@ -194,8 +194,8 @@ Each Google API operation is a LangGraph tool defined with Zod schemas. Tools ar
 | `list_calendar_events` | Read | Auto | `timeMin`, `timeMax`, `query` (optional) |
 | `get_calendar_event` | Read | Auto | `eventId` |
 | `create_calendar_event` | Write | Auto | `summary`, `startDateTime`, `endDateTime`, `startDate` (optional, YYYY-MM-DD for all-day), `endDate` (optional, YYYY-MM-DD for all-day), `location` (optional), `description` (optional), `attendees` (optional, array of emails) |
-| `update_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single` or `all`, required for recurring events), plus any fields to update (including `startDate`/`endDate` for all-day events) |
-| `delete_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single` or `all`, required for recurring events) |
+| `update_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single`, `thisAndFollowing`, or `all`, required for recurring events), plus any fields to update (including `startDate`/`endDate` for all-day events) |
+| `delete_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single`, `thisAndFollowing`, or `all`, required for recurring events) |
 
 **Tasks tools:**
 
@@ -412,7 +412,7 @@ The client includes the user's Google access token in the `Authorization` header
 
 1. Client clears all tokens from `expo-secure-store` (`auth_access_token`, `auth_refresh_token`, `auth_token_expiry`, `auth_user_email`).
 2. Client navigates to the sign-in screen.
-3. The thread ID is retained locally so the user can reconnect to the same conversation on re-auth.
+3. On re-auth, the thread ID is re-derived deterministically from the user's email (`troli-{sha256(email)}`), so the user reconnects to the same conversation even after reinstall or device change.
 4. No backend call is needed — the backend holds no session state or tokens.
 
 ---
@@ -477,7 +477,7 @@ All Google API calls go through a shared `fetchWithAuth` function that:
 - **Tokens never touch the backend's storage.** The client sends the Google access token per request. The backend passes it to tool functions via LangGraph's `config.configurable` (not graph state), which is not serialized by the checkpointer. The token exists only in memory for the duration of the request.
 - **Token refresh happens client-side only.** The backend never sees the refresh token.
 - **HTTPS everywhere.** All client-to-backend and backend-to-Google communication is over TLS.
-- **Thread isolation.** Each user's thread is identified by a hash of their email. There is no cross-user data access in v1.0 (single-user app).
+- **Thread isolation.** Each user's thread is identified by a hash of their email. Thread authorization (see above) prevents cross-user data access even with multiple test users.
 - **LangSmith traces may contain PII.** Traces will include calendar event titles, task names, and email content. Ensure the LangSmith project is private and access-controlled.
 
 ---
