@@ -1,0 +1,27 @@
+{
+  "name": "@troli/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'TODO: add linter'"
+  },
+  "dependencies": {
+    "expo": "~56.0.8",
+    "expo-auth-session": "~56.0.13",
+    "expo-crypto": "~56.0.4",
+    "expo-localization": "~56.0.6",
+    "expo-secure-store": "~56.0.4",
+    "expo-status-bar": "~56.0.4",
+    "react": "19.2.3",
+    "react-native": "0.85.3",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  }
+}
