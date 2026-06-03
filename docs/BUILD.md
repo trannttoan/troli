@@ -11,7 +11,7 @@ Set up both projects with tooling and infrastructure. No features yet.
 - **Mobile:** Init Expo managed project (TypeScript). Install core deps: `expo-auth-session`, `expo-secure-store`, `expo-crypto`, `zustand`, `expo-localization`.
 - **Backend:** Init LangGraph.js project (TypeScript). Install deps: `@langchain/langgraph`, `@langchain/core`, `@langchain/google-genai`, `@langgraphjs/toolkit`, `zod`. Configure `langgraph.json` for LangGraph Cloud deployment. The LLM provider is swappable via LangChain's `BaseChatModel` interface — install `@langchain/openai` or `@langchain/anthropic` as alternatives without refactoring.
 - **Google Cloud:** Create project, enable Calendar/Tasks/Gmail APIs, configure OAuth consent screen (external, test mode), create iOS OAuth client ID.
-- **Observability:** Set up LangSmith project (`troli-v1`), wire `LANGCHAIN_TRACING_V2`, `LANGSMITH_API_KEY`, `LANGCHAIN_PROJECT` env vars.
+- **Observability:** Set up LangSmith project (`troli-v1`), wire `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` env vars.
 
 ---
 

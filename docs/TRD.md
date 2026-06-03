@@ -381,9 +381,9 @@ The migration path is straightforward because LangGraph.js runs on any Node.js e
 All agent runs are traced in LangSmith. Integration is automatic when these environment variables are set:
 
 ```
-LANGCHAIN_TRACING_V2=true
+LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=<your-key>
-LANGCHAIN_PROJECT=troli-v1
+LANGSMITH_PROJECT=troli-v1
 ```
 
 **What gets traced:**

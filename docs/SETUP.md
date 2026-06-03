@@ -69,7 +69,7 @@ Go to **APIs & Services > Credentials**:
    LANGSMITH_API_KEY=<your-api-key>
    ```
 
-The other LangSmith env vars (`LANGCHAIN_TRACING_V2=true`, `LANGCHAIN_PROJECT=troli-v1`) are already in `.env.example`.
+The other LangSmith env vars (`LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT=troli-v1`) are already in `.env.example`.
 
 ---
 
