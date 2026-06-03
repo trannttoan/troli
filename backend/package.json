@@ -1,0 +1,26 @@
+{
+  "name": "@troli/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "npx @langchain/langgraph-cli dev",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'TODO: add linter'"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.48",
+    "@langchain/google-genai": "^2.1.31",
+    "@langchain/langgraph": "^1.3.4",
+    "@langgraphjs/toolkit": "^1.2.10",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@langchain/langgraph-cli": "^1.2.4",
+    "typescript": "^5.7.0"
+  }
+}
