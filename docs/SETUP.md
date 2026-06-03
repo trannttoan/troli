@@ -75,16 +75,16 @@ The other LangSmith env vars (`LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT=troli
 
 ## Verification Checklist
 
-- [ ] GCP project created
-- [ ] Google Calendar API enabled
-- [ ] Google Tasks API enabled
-- [ ] Gmail API enabled
-- [ ] Generative Language API (Gemini) enabled
-- [ ] OAuth consent screen configured (external, testing mode)
-- [ ] Test user added
-- [ ] iOS OAuth client ID created with bundle ID `com.troli.app`
-- [ ] Gemini API key created
-- [ ] LangSmith project `troli-v1` created
-- [ ] LangSmith API key created
-- [ ] `/backend/.env` populated from `.env.example`
-- [ ] `/mobile/.env` populated from `.env.example`
+- [x] GCP project created
+- [x] Google Calendar API enabled
+- [x] Google Tasks API enabled
+- [x] Gmail API enabled
+- [x] Generative Language API (Gemini) enabled
+- [x] OAuth consent screen configured (external, testing mode)
+- [x] Test user added
+- [x] iOS OAuth client ID created with bundle ID `com.troli.app`
+- [x] Gemini API key created
+- [x] LangSmith project `troli-v1` created
+- [x] LangSmith API key created
+- [x] `/backend/.env` populated from `.env.example`
+- [x] `/mobile/.env` populated from `.env.example`
