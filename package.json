@@ -1,0 +1,14 @@
+{
+  "name": "troli",
+  "private": true,
+  "packageManager": "pnpm@11.5.1",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev:mobile": "pnpm --filter @troli/mobile start",
+    "dev:backend": "pnpm --filter @troli/backend dev",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "pnpm -r run lint"
+  }
+}

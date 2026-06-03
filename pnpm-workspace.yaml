@@ -1,0 +1,7 @@
+packages:
+  - "mobile"
+  - "backend"
+allowBuilds:
+  '@langgraphjs/toolkit': true
+  esbuild: true
+  msgpackr-extract: true
