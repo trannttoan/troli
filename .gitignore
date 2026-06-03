@@ -1,5 +1,9 @@
 # Dependencies
 node_modules/
+.pnpm-store/
+
+# Agent files
+.claude/
 
 # Environment variables
 .env
