@@ -42,3 +42,6 @@ Thumbs.db
 
 # IDE
 .idea/
+
+# LangGraph API
+.langgraph_api
