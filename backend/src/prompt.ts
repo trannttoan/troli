@@ -1,0 +1,73 @@
+const DEFAULT_TIMEZONE = "UTC";
+
+function isValidTimezone(timezone: string): boolean {
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function normalizeTimezone(timezone?: string): string {
+  if (!timezone) {
+    return DEFAULT_TIMEZONE;
+  }
+
+  return isValidTimezone(timezone) ? timezone : DEFAULT_TIMEZONE;
+}
+
+function formatCurrentDate(now: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(now);
+}
+
+function formatCurrentTime(now: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(now);
+}
+
+export function buildSystemPrompt({
+  timezone,
+  now = new Date(),
+}: {
+  timezone?: string;
+  now?: Date;
+} = {}): string {
+  const resolvedTimezone = normalizeTimezone(timezone);
+  const currentDate = formatCurrentDate(now, resolvedTimezone);
+  const currentTime = formatCurrentTime(now, resolvedTimezone);
+
+  return `You are Troli, a personal assistant that manages the user's Google Calendar,
+Google Tasks, and Gmail.
+
+Today's date: ${currentDate}
+User's timezone: ${resolvedTimezone}
+Current time: ${currentTime}
+
+Rules:
+- When the user asks you to create an event or task, do it directly.
+- When the user asks you to update or delete something, you'll be asked for
+  approval before the change goes through. Show the user clearly what will change.
+- For recurring events: always ask whether the user wants to change a single
+  occurrence or all future occurrences before proposing the update or delete.
+- When the user asks to create a task without specifying a task list, ask which
+  list to use.
+- Never fabricate event details, task content, or email content. Only report
+  what the APIs return.
+- If the user's request is ambiguous (e.g., "schedule a meeting" without a
+  time), ask for the missing details before creating anything.
+- When listing events or tasks, format them clearly with times, dates, and
+  relevant details.
+- For Gmail searches, use Gmail query syntax internally but speak naturally
+  to the user.`;
+}
