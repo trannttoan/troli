@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "npx @langchain/langgraph-cli dev",
+    "dev": "langgraphjs dev",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'TODO: add linter'"
   },
