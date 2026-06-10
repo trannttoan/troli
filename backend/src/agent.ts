@@ -13,6 +13,10 @@ import {
 import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
 
 import { buildSystemPrompt, normalizeTimezone } from "./prompt.js";
+import {
+  validateGoogleToken,
+  verifyThreadAuthorization,
+} from "./utils/auth.js";
 import { stampLatestHumanMessage, stampMessage } from "./utils/timestamp.js";
 import { windowMessages } from "./utils/window-messages.js";
 
@@ -65,8 +69,18 @@ function preprocessMessages(messages: BaseMessage[]): {
   };
 }
 
+async function preprocessNode(
+  state: typeof AgentState.State,
+  config: LangGraphRunnableConfig,
+) {
+  const { email } = await validateGoogleToken(config);
+  verifyThreadAuthorization(config, email);
+
+  return preprocessMessages(state.messages);
+}
+
 const workflow = new StateGraph(AgentState)
-  .addNode("preprocess", (state) => preprocessMessages(state.messages))
+  .addNode("preprocess", preprocessNode)
   .addNode("agent", async (state, config) => {
     const response = await getModel().invoke([
       new SystemMessage(buildSystemPrompt({ timezone: getTimezoneFromConfig(config) })),
