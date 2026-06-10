@@ -13,6 +13,7 @@
     "langgraph:dockerfile": "langgraphjs dockerfile ./Dockerfile.langgraph",
     "langgraph:up": "langgraphjs up",
     "typecheck": "tsc --noEmit",
+    "verify:cloud": "node ./scripts/verify-langgraph-cloud.mjs",
     "lint": "echo 'TODO: add linter'"
   },
   "dependencies": {
