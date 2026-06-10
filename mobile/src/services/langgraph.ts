@@ -4,6 +4,7 @@ const THREAD_POLL_INTERVAL_MS = 2000;
 const THREAD_POLL_TIMEOUT_MS = 30000;
 
 type LangGraphConfig = {
+  assistantId: string;
   apiKey: string;
   apiUrl: string;
 };
@@ -99,7 +100,7 @@ export async function streamRun(input: StreamRunInput): Promise<void> {
     `/threads/${input.threadId}/runs/stream`,
     {
       body: JSON.stringify({
-        assistant_id: 'agent',
+        assistant_id: getLangGraphConfig().assistantId,
         config: {
           configurable: {
             access_token: input.accessToken,
@@ -242,6 +243,8 @@ async function buildLangGraphError(response: Response): Promise<Error> {
 function getLangGraphConfig(): LangGraphConfig {
   const apiUrl = process.env.EXPO_PUBLIC_LANGGRAPH_API_URL?.trim() ?? '';
   const apiKey = process.env.EXPO_PUBLIC_LANGGRAPH_API_KEY?.trim() ?? '';
+  const assistantId =
+    process.env.EXPO_PUBLIC_LANGGRAPH_ASSISTANT_ID?.trim() || 'agent';
 
   if (!apiUrl || !apiKey) {
     const missing = getMissingLangGraphConfig();
@@ -249,6 +252,7 @@ function getLangGraphConfig(): LangGraphConfig {
   }
 
   return {
+    assistantId,
     apiKey,
     apiUrl: apiUrl.replace(/\/+$/, ''),
   };
