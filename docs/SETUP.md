@@ -71,6 +71,10 @@ Go to **APIs & Services > Credentials**:
 
 The other LangSmith env vars (`LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT=troli-v1`) are already in `.env.example`.
 
+## 7. LangGraph Cloud Deploy
+
+After local backend and mobile development are working, follow [DEPLOY.md](DEPLOY.md) for the first LangGraph Cloud rollout and the post-deploy SSE verification step.
+
 ---
 
 ## Verification Checklist
