@@ -216,19 +216,26 @@ async function fetchLangGraphResponse(
   });
 
   if (!response.ok) {
-    throw await buildLangGraphError(response);
+    throw await buildLangGraphError(response, path, config.apiUrl);
   }
 
   return response;
 }
 
-async function buildLangGraphError(response: Response): Promise<Error> {
-  const fallbackMessage = `LangGraph request failed with status ${response.status}.`;
+async function buildLangGraphError(
+  response: Response,
+  path: string,
+  apiUrl: string,
+): Promise<Error> {
+  const fallbackMessage = `LangGraph request to ${path} failed with status ${response.status}.`;
   const contentType = response.headers.get('content-type') ?? '';
+  const likelyConfigIssue = buildLikelyConfigIssue(response.status, apiUrl);
 
   if (!contentType.includes('application/json')) {
     const bodyText = (await response.text()).trim();
-    return new Error(bodyText || fallbackMessage);
+    return new Error(
+      [bodyText || fallbackMessage, likelyConfigIssue].filter(Boolean).join(' '),
+    );
   }
 
   const payload = (await response.json()) as
@@ -236,7 +243,12 @@ async function buildLangGraphError(response: Response): Promise<Error> {
     | undefined;
 
   return new Error(
-    payload?.detail ?? payload?.error ?? payload?.message ?? fallbackMessage,
+    [
+      payload?.detail ?? payload?.error ?? payload?.message ?? fallbackMessage,
+      likelyConfigIssue,
+    ]
+      .filter(Boolean)
+      .join(' '),
   );
 }
 
@@ -256,6 +268,21 @@ function getLangGraphConfig(): LangGraphConfig {
     apiKey,
     apiUrl: apiUrl.replace(/\/+$/, ''),
   };
+}
+
+function buildLikelyConfigIssue(
+  status: number,
+  apiUrl: string,
+): string | null {
+  if (status !== 404) {
+    return null;
+  }
+
+  if (apiUrl.includes('api.smith.langchain.com')) {
+    return 'EXPO_PUBLIC_LANGGRAPH_API_URL is pointing to LangSmith. Use your LangGraph deployment base URL instead.';
+  }
+
+  return 'Verify EXPO_PUBLIC_LANGGRAPH_API_URL points to the deployed LangGraph API base URL.';
 }
 
 function normalizeThreadMessages(messages: unknown[]): HydratedChatMessage[] {
