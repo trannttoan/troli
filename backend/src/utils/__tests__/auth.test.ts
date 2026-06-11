@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   TroliAuthError,
+  isTroliAuthError,
   validateGoogleToken,
   verifyThreadAuthorization,
 } from "../auth.js";
@@ -90,6 +91,83 @@ describe("validateGoogleToken", () => {
       status: 401,
     });
   });
+
+  it("returns a retryable error when Google returns a 5xx status", async () => {
+    fetchMock.mockResolvedValue(
+      new Response("Internal Server Error", { status: 502 }),
+    );
+
+    await expect(
+      validateGoogleToken({
+        configurable: {
+          access_token: "valid-token",
+        },
+      }),
+    ).rejects.toMatchObject<TroliAuthError>({
+      code: "AUTH_TOKENINFO_UNAVAILABLE",
+      retryable: true,
+      status: 503,
+    });
+  });
+
+  it("returns a retryable error when the request times out", async () => {
+    fetchMock.mockRejectedValue(
+      new DOMException("The operation was aborted.", "AbortError"),
+    );
+
+    await expect(
+      validateGoogleToken({
+        configurable: {
+          access_token: "valid-token",
+        },
+      }),
+    ).rejects.toMatchObject<TroliAuthError>({
+      code: "AUTH_TOKENINFO_UNAVAILABLE",
+      retryable: true,
+      status: 503,
+    });
+  });
+
+  it("returns a retryable error on a transient network failure", async () => {
+    fetchMock.mockRejectedValue(new TypeError("fetch failed"));
+
+    await expect(
+      validateGoogleToken({
+        configurable: {
+          access_token: "valid-token",
+        },
+      }),
+    ).rejects.toMatchObject<TroliAuthError>({
+      code: "AUTH_TOKENINFO_UNAVAILABLE",
+      retryable: true,
+      status: 503,
+    });
+  });
+
+  it("throws when the access token is missing from the config", async () => {
+    await expect(
+      validateGoogleToken({ configurable: {} }),
+    ).rejects.toMatchObject<TroliAuthError>({
+      code: "AUTH_MISSING_ACCESS_TOKEN",
+      retryable: false,
+      status: 401,
+    });
+  });
+});
+
+describe("isTroliAuthError", () => {
+  it("returns true for TroliAuthError instances", () => {
+    const error = new TroliAuthError("AUTH_INVALID_TOKEN", "test", {
+      retryable: false,
+      status: 401,
+    });
+
+    expect(isTroliAuthError(error)).toBe(true);
+  });
+
+  it("returns false for plain Error instances", () => {
+    expect(isTroliAuthError(new Error("test"))).toBe(false);
+  });
 });
 
 describe("verifyThreadAuthorization", () => {
@@ -106,6 +184,21 @@ describe("verifyThreadAuthorization", () => {
         email,
       ),
     ).not.toThrow();
+  });
+
+  it("throws when the thread id is missing from the config", () => {
+    expect(() =>
+      verifyThreadAuthorization(
+        { configurable: {} },
+        "person@example.com",
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "AUTH_THREAD_MISMATCH",
+        retryable: false,
+        status: 403,
+      }),
+    );
   });
 
   it("rejects a mismatched thread id", () => {
