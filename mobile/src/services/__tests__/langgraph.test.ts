@@ -5,7 +5,13 @@ jest.mock('../sse', () => ({
 }));
 
 import { consumeSseStream } from '../sse';
-import { bootstrapThread, streamRun } from '../langgraph';
+import {
+  bootstrapThread,
+  getMissingLangGraphConfig,
+  hydrateThreadMessages,
+  isLangGraphConfigured,
+  streamRun,
+} from '../langgraph';
 
 function createJsonResponse(payload: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(payload), {
@@ -177,5 +183,149 @@ describe('langgraph service', () => {
     expect(onEvent).toHaveBeenCalledTimes(2);
     expect(onAssistantTextSnapshot).toHaveBeenNthCalledWith(1, 'Hello');
     expect(onAssistantTextSnapshot).toHaveBeenNthCalledWith(2, 'Hello world');
+  });
+
+  it('polls until the thread settles when status is busy', async () => {
+    fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ thread_id: 'thread-123' }))
+      .mockResolvedValueOnce(createJsonResponse({ status: 'busy' }))
+      .mockResolvedValueOnce(createJsonResponse({ status: 'busy' }))
+      .mockResolvedValueOnce(createJsonResponse({ status: 'idle' }))
+      .mockResolvedValueOnce(createJsonResponse({ values: { messages: [] } }));
+
+    jest.useFakeTimers();
+
+    const promise = bootstrapThread('thread-123');
+
+    await jest.advanceTimersByTimeAsync(2000);
+    await jest.advanceTimersByTimeAsync(2000);
+
+    const result = await promise;
+
+    jest.useRealTimers();
+
+    expect(result.status).toBe('idle');
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it('throws when the langgraph api returns an error response', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ detail: 'Not found' }), {
+        headers: { 'content-type': 'application/json' },
+        status: 404,
+      }),
+    );
+
+    await expect(bootstrapThread('thread-123')).rejects.toThrow('Not found');
+  });
+
+  it('throws with config hint when 404 and url points to langsmith', async () => {
+    process.env.EXPO_PUBLIC_LANGGRAPH_API_URL = 'https://api.smith.langchain.com/';
+
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ detail: 'Not found' }), {
+        headers: { 'content-type': 'application/json' },
+        status: 404,
+      }),
+    );
+
+    await expect(bootstrapThread('thread-123')).rejects.toThrow(
+      'EXPO_PUBLIC_LANGGRAPH_API_URL is pointing to LangSmith',
+    );
+  });
+
+  it('throws with a non-json error body as the message', async () => {
+    fetchMock.mockResolvedValue(
+      new Response('Bad Gateway', {
+        headers: { 'content-type': 'text/plain' },
+        status: 502,
+      }),
+    );
+
+    await expect(bootstrapThread('thread-123')).rejects.toThrow('Bad Gateway');
+  });
+
+  it('filters out messages with no role or empty text during hydration', async () => {
+    fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ thread_id: 'thread-123' }))
+      .mockResolvedValueOnce(createJsonResponse({ status: 'idle' }))
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          values: {
+            messages: [
+              { content: 'Hello', id: 'msg-1', role: 'human' },
+              { content: '', id: 'msg-2', role: 'ai' },
+              { content: 'No role', id: 'msg-3' },
+              { content: 'Reply', role: 'assistant' },
+            ],
+          },
+        }),
+      );
+
+    const result = await bootstrapThread('thread-123');
+
+    expect(result.messages).toEqual([
+      { id: 'msg-1', role: 'user', text: 'Hello', timestamp: null },
+      { id: 'assistant-3', role: 'assistant', text: 'Reply', timestamp: null },
+    ]);
+  });
+
+  it('generates a fallback id when the message has no id field', async () => {
+    fetchMock.mockResolvedValue(
+      createJsonResponse({
+        values: {
+          messages: [{ content: 'Hello', role: 'human' }],
+        },
+      }),
+    );
+
+    const messages = await hydrateThreadMessages('thread-123');
+
+    expect(messages[0]?.id).toBe('user-0');
+  });
+});
+
+describe('getMissingLangGraphConfig', () => {
+  afterEach(() => {
+    delete process.env.EXPO_PUBLIC_LANGGRAPH_API_URL;
+    delete process.env.EXPO_PUBLIC_LANGGRAPH_API_KEY;
+  });
+
+  it('returns missing env var names when unset', () => {
+    delete process.env.EXPO_PUBLIC_LANGGRAPH_API_URL;
+    delete process.env.EXPO_PUBLIC_LANGGRAPH_API_KEY;
+
+    expect(getMissingLangGraphConfig()).toEqual([
+      'EXPO_PUBLIC_LANGGRAPH_API_URL',
+      'EXPO_PUBLIC_LANGGRAPH_API_KEY',
+    ]);
+  });
+
+  it('returns an empty array when all vars are set', () => {
+    process.env.EXPO_PUBLIC_LANGGRAPH_API_URL = 'https://example.com';
+    process.env.EXPO_PUBLIC_LANGGRAPH_API_KEY = 'key';
+
+    expect(getMissingLangGraphConfig()).toEqual([]);
+  });
+});
+
+describe('isLangGraphConfigured', () => {
+  afterEach(() => {
+    delete process.env.EXPO_PUBLIC_LANGGRAPH_API_URL;
+    delete process.env.EXPO_PUBLIC_LANGGRAPH_API_KEY;
+  });
+
+  it('returns false when config is missing', () => {
+    delete process.env.EXPO_PUBLIC_LANGGRAPH_API_URL;
+    delete process.env.EXPO_PUBLIC_LANGGRAPH_API_KEY;
+
+    expect(isLangGraphConfigured()).toBe(false);
+  });
+
+  it('returns true when config is present', () => {
+    process.env.EXPO_PUBLIC_LANGGRAPH_API_URL = 'https://example.com';
+    process.env.EXPO_PUBLIC_LANGGRAPH_API_KEY = 'key';
+
+    expect(isLangGraphConfigured()).toBe(true);
   });
 });
