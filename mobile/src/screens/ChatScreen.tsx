@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -9,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatInput } from '../components/ChatInput';
 import { MessageBubble } from '../components/MessageBubble';
@@ -31,8 +32,31 @@ export function ChatScreen() {
   const sendMessage = useChatStore((state) => state.sendMessage);
   const signOut = useAuthStore((state) => state.signOut);
   const hasBootstrappedRef = useRef(false);
+  const insets = useSafeAreaInsets();
   const isConfigured = isLangGraphConfigured();
   const missingConfig = useMemo(() => getMissingLangGraphConfig(), []);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const keyboardVerticalOffset =
+    Platform.OS === 'ios' ? insets.top + 56 : 0;
+
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSubscription = Keyboard.addListener(showEvent, () => {
+      setIsKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setIsKeyboardVisible(false);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isConfigured || hasBootstrappedRef.current) {
@@ -75,7 +99,7 @@ export function ChatScreen() {
     <SafeAreaView edges={['bottom']} style={styles.screen}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+        keyboardVerticalOffset={keyboardVerticalOffset}
         style={styles.flex}>
         {isBootstrapping && messages.length === 0 ? (
           <View style={styles.loadingState}>
@@ -102,9 +126,11 @@ export function ChatScreen() {
             ) : null}
 
             <FlatList
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
               contentContainerStyle={styles.listContent}
               data={messages}
               keyExtractor={(item) => item.id}
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
                 <View style={styles.emptyState}>
@@ -115,8 +141,27 @@ export function ChatScreen() {
                 </View>
               }
               ListFooterComponent={isSending ? <TypingIndicator /> : null}
+              onScrollBeginDrag={() => {
+                Keyboard.dismiss();
+              }}
               renderItem={({ item }) => <MessageBubble message={item} />}
             />
+
+            {isKeyboardVisible ? (
+              <View style={styles.keyboardAccessory}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    Keyboard.dismiss();
+                  }}
+                  style={({ pressed }) => [
+                    styles.keyboardDismissButton,
+                    pressed ? styles.buttonPressed : null,
+                  ]}>
+                  <Text style={styles.keyboardDismissText}>Done</Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             <View style={styles.inputWrap}>
               <ChatInput
@@ -207,6 +252,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     paddingTop: 10,
+  },
+  keyboardAccessory: {
+    alignItems: 'flex-end',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  keyboardDismissButton: {
+    backgroundColor: '#e4efe8',
+    borderColor: '#b9d0c4',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  keyboardDismissText: {
+    color: '#1f5c4a',
+    fontSize: 13,
+    fontWeight: '700',
   },
   listContent: {
     flexGrow: 1,

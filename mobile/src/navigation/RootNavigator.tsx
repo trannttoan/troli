@@ -12,27 +12,34 @@ type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-function HeaderAccount() {
+function HeaderTitle() {
   const email = useAuthStore((state) => state.email);
-  const signOut = useAuthStore((state) => state.signOut);
 
   return (
-    <View style={styles.headerAccount}>
+    <View style={styles.headerTitleWrap}>
+      <Text style={styles.headerTitle}>Troli</Text>
       <Text numberOfLines={1} style={styles.headerEmail}>
         {email ?? 'Unknown account'}
       </Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => {
-          void signOut();
-        }}
-        style={({ pressed }) => [
-          styles.headerSignOut,
-          pressed ? styles.buttonPressed : null,
-        ]}>
-        <Text style={styles.headerSignOutText}>Sign out</Text>
-      </Pressable>
     </View>
+  );
+}
+
+function HeaderSignOut() {
+  const signOut = useAuthStore((state) => state.signOut);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => {
+        void signOut();
+      }}
+      style={({ pressed }) => [
+        styles.headerSignOut,
+        pressed ? styles.buttonPressed : null,
+      ]}>
+      <Text style={styles.headerSignOutText}>Sign out</Text>
+    </Pressable>
   );
 }
 
@@ -52,8 +59,9 @@ export function RootNavigator() {
           name="Chat"
           options={{
             headerBackVisible: false,
-            headerRight: HeaderAccount,
-            headerTitle: 'Troli',
+            headerRight: HeaderSignOut,
+            headerTitle: HeaderTitle,
+            headerTitleAlign: 'left',
           }}
         />
       ) : (
@@ -71,25 +79,32 @@ const styles = StyleSheet.create({
   buttonPressed: {
     opacity: 0.9,
   },
-  headerAccount: {
-    alignItems: 'flex-end',
-    gap: 6,
-    maxWidth: 180,
-  },
   headerEmail: {
     color: '#61584d',
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  headerTitle: {
+    color: '#1f2a24',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  headerTitleWrap: {
+    gap: 2,
+    maxWidth: 220,
   },
   headerSignOut: {
+    backgroundColor: '#1f5c4a',
     borderColor: '#1f5c4a',
-    borderRadius: 14,
+    borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 10,
+    minHeight: 34,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
     paddingVertical: 6,
   },
   headerSignOutText: {
-    color: '#1f5c4a',
+    color: '#f7f4ee',
     fontSize: 12,
     fontWeight: '700',
   },
