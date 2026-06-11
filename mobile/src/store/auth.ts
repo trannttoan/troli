@@ -8,7 +8,6 @@ import {
   refreshGoogleAccessToken,
   type AuthSessionData,
 } from '../utils/auth';
-import { resetChatState } from './chat';
 
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
@@ -178,6 +177,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async (reason = null) => {
     refreshPromise = null;
     await clearStoredSession();
+    const { resetChatState } = await import('./chat');
     resetChatState();
 
     set({
