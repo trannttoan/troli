@@ -81,4 +81,61 @@ describe('consumeSseStream', () => {
       },
     ]);
   });
+
+  it('throws when the response body is null', async () => {
+    await expect(
+      consumeSseStream({
+        onEvent: async () => {},
+        response: { body: null } as Response,
+      }),
+    ).rejects.toThrow('Streaming response body is unavailable.');
+  });
+
+  it('parses multiple events delivered in a single chunk', async () => {
+    const events: Array<{ data: string; event: string; id?: string }> = [];
+
+    await consumeSseStream({
+      onEvent: async (event) => {
+        events.push(event);
+      },
+      response: createStreamingResponse([
+        'data: first\n\nevent: custom\ndata: second\n\n',
+      ]),
+    });
+
+    expect(events).toEqual([
+      { data: 'first', event: 'message', id: undefined },
+      { data: 'second', event: 'custom', id: undefined },
+    ]);
+  });
+
+  it('handles \\r\\n line endings', async () => {
+    const events: Array<{ data: string; event: string; id?: string }> = [];
+
+    await consumeSseStream({
+      onEvent: async (event) => {
+        events.push(event);
+      },
+      response: createStreamingResponse([
+        'event: ping\r\ndata: pong\r\n\r\n',
+      ]),
+    });
+
+    expect(events).toEqual([
+      { data: 'pong', event: 'ping', id: undefined },
+    ]);
+  });
+
+  it('emits no events for an empty stream', async () => {
+    const events: Array<{ data: string; event: string }> = [];
+
+    await consumeSseStream({
+      onEvent: async (event) => {
+        events.push(event);
+      },
+      response: createStreamingResponse([]),
+    });
+
+    expect(events).toEqual([]);
+  });
 });
