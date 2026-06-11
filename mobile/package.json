@@ -15,6 +15,7 @@
   "dependencies": {
     "@react-navigation/native": "^7.3.0",
     "@react-navigation/native-stack": "^7.17.1",
+    "abort-controller": "^3.0.0",
     "expo": "~56.0.8",
     "expo-auth-session": "~56.0.13",
     "expo-crypto": "~56.0.4",
