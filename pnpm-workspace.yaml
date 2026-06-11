@@ -8,3 +8,4 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@langchain/langgraph-sdk@1.9.19'
   - '@langchain/langgraph@1.3.7'
+  - jest-expo@56.0.5

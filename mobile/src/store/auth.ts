@@ -38,6 +38,10 @@ type AuthState = {
   status: AuthStatus;
 };
 
+type ChatStoreModule = {
+  resetChatState: () => void;
+};
+
 const signedOutState = {
   accessToken: null,
   email: null,
@@ -48,6 +52,7 @@ const signedOutState = {
 };
 
 let refreshPromise: Promise<string> | null = null;
+let loadChatStoreModule: () => Promise<ChatStoreModule> = () => import('./chat');
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   ...signedOutState,
@@ -177,7 +182,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async (reason = null) => {
     refreshPromise = null;
     await clearStoredSession();
-    const { resetChatState } = await import('./chat');
+    const { resetChatState } = await loadChatStoreModule();
     resetChatState();
 
     set({
@@ -187,6 +192,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 }));
+
+export function __setLoadChatStoreModuleForTest(
+  loader: (() => Promise<ChatStoreModule>) | null,
+) {
+  loadChatStoreModule = loader ?? (() => import('./chat'));
+}
 
 async function clearStoredSession() {
   await Promise.all([
