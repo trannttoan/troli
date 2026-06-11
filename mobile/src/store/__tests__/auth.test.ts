@@ -138,4 +138,138 @@ describe('useAuthStore', () => {
     });
     authStore.__setLoadChatStoreModuleForTest(null);
   });
+
+  it('returns the current token without refreshing when it is still valid', async () => {
+    const { authStore, authUtils } = await loadAuthModule();
+    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+
+    await authStore.useAuthStore.getState().signIn(baseSession);
+
+    await expect(authStore.useAuthStore.getState().getValidToken()).resolves.toBe(
+      'initial-access-token',
+    );
+    expect(refreshGoogleAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('throws when getValidToken is called while signed out', async () => {
+    const { authStore } = await loadAuthModule();
+
+    authStore.useAuthStore.setState({ status: 'signed_out' });
+
+    await expect(authStore.useAuthStore.getState().getValidToken()).rejects.toThrow(
+      'User is not authenticated.',
+    );
+  });
+
+  it('signs out when refresh fails with a force-reauth error', async () => {
+    const { authStore, authUtils } = await loadAuthModule();
+    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+    const resetChatState = jest.fn();
+
+    authStore.__setLoadChatStoreModuleForTest(async () => ({ resetChatState }));
+
+    refreshGoogleAccessToken.mockRejectedValue({ code: 'force', message: 'Reauth required' });
+
+    await authStore.useAuthStore.getState().signIn({
+      ...baseSession,
+      expiryAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    await expect(authStore.useAuthStore.getState().getValidToken()).rejects.toBeDefined();
+
+    expect(authStore.useAuthStore.getState().status).toBe('signed_out');
+    expect(resetChatState).toHaveBeenCalledTimes(1);
+
+    authStore.__setLoadChatStoreModuleForTest(null);
+  });
+
+  it('sets errorMessage without signing out on a non-fatal refresh error', async () => {
+    const { authStore, authUtils } = await loadAuthModule();
+    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+
+    refreshGoogleAccessToken.mockRejectedValue(new Error('Network error'));
+
+    await authStore.useAuthStore.getState().signIn({
+      ...baseSession,
+      expiryAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    await expect(authStore.useAuthStore.getState().getValidToken()).rejects.toThrow(
+      'Network error',
+    );
+
+    expect(authStore.useAuthStore.getState().status).toBe('signed_in');
+    expect(authStore.useAuthStore.getState().errorMessage).toBe('Network error');
+  });
+
+  it('clears errorMessage via clearError', async () => {
+    const { authStore } = await loadAuthModule();
+
+    await authStore.useAuthStore.getState().signIn(baseSession);
+
+    authStore.useAuthStore.setState({ errorMessage: 'stale error' });
+    authStore.useAuthStore.getState().clearError();
+
+    expect(authStore.useAuthStore.getState().errorMessage).toBeNull();
+  });
+
+  it('initializes from secure storage when a full session is stored', async () => {
+    const { authStore, secureStore } = await loadAuthModule();
+    const getItemAsync = jest.mocked(secureStore.getItemAsync);
+
+    getItemAsync.mockImplementation((key: string) => {
+      const stored: Record<string, string> = {
+        auth_access_token: 'stored-access',
+        auth_refresh_token: 'stored-refresh',
+        auth_token_expiry: '2099-01-01T00:00:00.000Z',
+        auth_user_email: 'stored@example.com',
+      };
+
+      return Promise.resolve(stored[key] ?? null);
+    });
+
+    await authStore.useAuthStore.getState().initialize();
+
+    expect(authStore.useAuthStore.getState()).toMatchObject({
+      accessToken: 'stored-access',
+      email: 'stored@example.com',
+      refreshToken: 'stored-refresh',
+      status: 'signed_in',
+    });
+  });
+
+  it('clears partial session data during initialize and stays signed out', async () => {
+    const { authStore, secureStore } = await loadAuthModule();
+    const getItemAsync = jest.mocked(secureStore.getItemAsync);
+    const deleteItemAsync = jest.mocked(secureStore.deleteItemAsync);
+
+    getItemAsync.mockImplementation((key: string) => {
+      if (key === 'auth_access_token') return Promise.resolve('orphaned-token');
+      return Promise.resolve(null);
+    });
+
+    await authStore.useAuthStore.getState().initialize();
+
+    expect(deleteItemAsync).toHaveBeenCalledTimes(4);
+    expect(authStore.useAuthStore.getState().status).toBe('signed_out');
+  });
+
+  it('persists session to secure storage on sign-in', async () => {
+    const { authStore, secureStore } = await loadAuthModule();
+    const setItemAsync = jest.mocked(secureStore.setItemAsync);
+
+    await authStore.useAuthStore.getState().signIn(baseSession);
+
+    expect(setItemAsync).toHaveBeenCalledTimes(4);
+    expect(setItemAsync).toHaveBeenCalledWith(
+      'auth_access_token',
+      'initial-access-token',
+      expect.anything(),
+    );
+    expect(setItemAsync).toHaveBeenCalledWith(
+      'auth_user_email',
+      'person@example.com',
+      expect.anything(),
+    );
+  });
 });
