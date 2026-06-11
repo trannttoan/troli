@@ -2,13 +2,6 @@
 
 An iOS app that manages Google Calendar, Google Tasks, and Gmail through a conversational AI interface.
 
-<!-- ![Demo](docs/demo.gif) -->
-
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
-![React Native](https://img.shields.io/badge/React_Native-61DAFB?logo=react&logoColor=black)
-![Expo](https://img.shields.io/badge/Expo-000020?logo=expo&logoColor=white)
-![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?logo=langchain&logoColor=white)
-
 ## Overview
 
 Troli connects to a user's Google Calendar, Google Tasks, and Gmail through a single chat interface. The user sends natural language requests, and a LangGraph-powered agent interprets them, calls the appropriate Google APIs, and streams the response back in real time via SSE.
