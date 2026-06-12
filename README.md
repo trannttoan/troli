@@ -1,6 +1,10 @@
-# Troli
+<h1 align="center">Troli</h1>
 
-[![CI](https://github.com/trannttoan/troli/actions/workflows/ci.yml/badge.svg)](https://github.com/trannttoan/troli/actions/workflows/ci.yml)
+<p align="center">
+  <a href="https://github.com/trannttoan/troli/actions/workflows/ci.yml"><img src="https://github.com/trannttoan/troli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/github/license/trannttoan/troli" alt="License">
+  <img src="https://img.shields.io/github/package-json/v/trannttoan/troli?filename=mobile%2Fpackage.json&label=version" alt="Version">
+</p>
 
 An iOS app that manages Google Calendar, Google Tasks, and Gmail through a conversational AI interface.
 
