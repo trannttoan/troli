@@ -36,8 +36,8 @@ Full calendar CRUD. Introduces the HITL interrupt/resume flow.
 
 - **Read tools:** `list_calendar_events`, `get_calendar_event`. Wire up shared `fetchWithAuth` helper. Confirm the agent can answer "what's on my calendar tomorrow?"
 - **Create tool:** `create_calendar_event`. Agent creates directly (no approval). Supports timed events, all-day events (`start.date`/`end.date`), and optional attendee emails.
-- **HITL plumbing:** Implement `interrupt()` in backend write tools. Approval card component in client (inline in chat, Approve/Reject buttons). Resume endpoint: `POST /threads/{id}/runs` with `Command(resume=...)`. On app reopen, check thread state for `interrupted` status and re-render any pending approval card.
-- **Write tools:** `update_calendar_event` (with `recurringEventScope`: single/thisAndFollowing/all), `delete_calendar_event`. Both behind HITL approval.
+- **HITL plumbing:** Implement `interrupt()` in backend write tools. Approval card component in client (inline in chat, Approve/Reject buttons). Resume via `POST /threads/{id}/runs/stream` with `command: { resume: "approve"|"reject" }`. Post-stream interrupt detection: after `streamRun()` completes (or on app reopen), check thread status and extract interrupt payload from thread state. On app reopen, check thread state for `interrupted` status and re-render any pending approval card.
+- **Write tools:** `update_calendar_event` (with `recurringEventScope`: single/all; `thisAndFollowing` deferred — requires split-series flow), `delete_calendar_event`. Both behind HITL approval.
 - **Tests:** `fetchWithAuth` helper, tool unit tests (mocked API responses), HITL interrupt/resume cycle with approve/reject.
 
 ---
