@@ -9,6 +9,7 @@ export const GOOGLE_SCOPES = [
   'openid',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/calendar.events.owned',
 ];
 
 export type AuthSessionData = {
@@ -16,6 +17,7 @@ export type AuthSessionData = {
   refreshToken: string;
   expiryAt: string;
   email: string;
+  scopes: string[];
 };
 
 type GoogleUserInfo = {
@@ -106,6 +108,7 @@ export async function buildSessionFromAuthResponse(
       response.authentication.expiresIn,
     ),
     email,
+    scopes: GOOGLE_SCOPES,
   };
 }
 

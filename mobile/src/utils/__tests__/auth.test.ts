@@ -57,6 +57,12 @@ describe('buildSessionFromAuthResponse', () => {
       email: 'user@example.com',
       expiryAt: expect.any(String),
       refreshToken: 'refresh-token',
+      scopes: [
+        'openid',
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile',
+        'https://www.googleapis.com/auth/calendar.events.owned',
+      ],
     });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://openidconnect.googleapis.com/v1/userinfo',
