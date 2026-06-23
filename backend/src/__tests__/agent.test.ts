@@ -2,14 +2,20 @@ import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TroliAuthError } from "../utils/auth.js";
+import { fetchWithAuth } from "../utils/google-api.js";
 import { generateThreadId } from "../utils/thread.js";
 import { getMessageTimestamp, stampMessage } from "../utils/timestamp.js";
 
 const modelInvokeSpy = vi.fn();
+const modelBindToolsSpy = vi.fn();
 
 vi.mock("@langchain/google-genai", () => {
   return {
     ChatGoogleGenerativeAI: class MockChatGoogleGenerativeAI {
+      bindTools = modelBindToolsSpy.mockImplementation(() => ({
+        invoke: modelInvokeSpy,
+      }));
+
       invoke = modelInvokeSpy;
     },
   };
@@ -22,6 +28,15 @@ vi.mock("../utils/auth.js", async (importOriginal) => {
     ...actual,
     validateGoogleToken: vi.fn(),
     verifyThreadAuthorization: vi.fn(),
+  };
+});
+
+vi.mock("../utils/google-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/google-api.js")>();
+
+  return {
+    ...actual,
+    fetchWithAuth: vi.fn(),
   };
 });
 
@@ -49,17 +64,20 @@ function buildConfig(overrides: Record<string, unknown> = {}) {
 describe("agent graph", () => {
   beforeEach(() => {
     modelInvokeSpy.mockResolvedValue(new AIMessage("mocked response"));
+    modelBindToolsSpy.mockClear();
 
     process.env.GOOGLE_API_KEY = "test-api-key";
 
     vi.mocked(validateGoogleToken).mockResolvedValue({ email: TEST_EMAIL });
     vi.mocked(verifyThreadAuthorization).mockImplementation(() => {});
+    vi.mocked(fetchWithAuth).mockResolvedValue({ items: [] });
 
     vi.spyOn(Date, "now").mockReturnValue(FIXED_TIMESTAMP);
   });
 
   afterEach(() => {
     modelInvokeSpy.mockReset();
+    vi.mocked(fetchWithAuth).mockReset();
     vi.restoreAllMocks();
     delete process.env.GOOGLE_API_KEY;
   });
@@ -267,6 +285,64 @@ describe("agent graph", () => {
       expect(result.messages).toHaveLength(4);
       expect(getMessageTimestamp(result.messages[0]!)).toBe(earlierTimestamp);
       expect(getMessageTimestamp(result.messages[2]!)).toBe(FIXED_TIMESTAMP);
+    });
+
+    it("completes the tool loop when the model calls list_calendar_events", async () => {
+      modelInvokeSpy
+        .mockResolvedValueOnce(
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "tool-call-1",
+                name: "list_calendar_events",
+                args: {
+                  timeMin: "2026-01-16T00:00:00-05:00",
+                  timeMax: "2026-01-17T00:00:00-05:00",
+                },
+                type: "tool_call",
+              },
+            ],
+          }),
+        )
+        .mockResolvedValueOnce(
+          new AIMessage("You have one event tomorrow: Team Sync at 9:00 AM."),
+        );
+      vi.mocked(fetchWithAuth).mockResolvedValue({
+        items: [
+          {
+            id: "event-1",
+            summary: "Team Sync",
+            start: { dateTime: "2026-01-16T09:00:00-05:00" },
+            end: { dateTime: "2026-01-16T09:30:00-05:00" },
+          },
+        ],
+      });
+
+      const result = await graph.invoke(
+        {
+          messages: [new HumanMessage("What's on my calendar tomorrow?")],
+        },
+        buildConfig(),
+      );
+
+      expect(modelBindToolsSpy).toHaveBeenCalled();
+      expect(modelInvokeSpy).toHaveBeenCalledTimes(2);
+      expect(fetchWithAuth).toHaveBeenCalledWith(
+        expect.stringContaining("/calendars/primary/events?"),
+        expect.objectContaining({ method: "GET" }),
+        "test-access-token",
+      );
+
+      const secondInvokeArgs = modelInvokeSpy.mock.calls[1]![0];
+      const toolMessage = secondInvokeArgs.find(
+        (message: { _getType: () => string }) => message._getType() === "tool",
+      );
+
+      expect(toolMessage?.content).toContain("Team Sync");
+      expect(result.messages[result.messages.length - 1]?.content).toBe(
+        "You have one event tomorrow: Team Sync at 9:00 AM.",
+      );
     });
   });
 });

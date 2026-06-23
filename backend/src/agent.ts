@@ -4,6 +4,7 @@ import {
   StateGraph,
   messagesStateReducer,
 } from "@langchain/langgraph";
+import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import {
   BaseMessage,
@@ -19,6 +20,7 @@ import {
 } from "./utils/auth.js";
 import { stampLatestHumanMessage, stampMessage } from "./utils/timestamp.js";
 import { windowMessages } from "./utils/window-messages.js";
+import { calendarTools } from "./tools/calendar.js";
 
 const AgentState = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
@@ -74,17 +76,22 @@ async function preprocessNode(
   return preprocessMessages(state.messages);
 }
 
+const toolNode = new ToolNode(calendarTools);
+
 const workflow = new StateGraph(AgentState)
   .addNode("preprocess", preprocessNode)
   .addNode("agent", async (state, config) => {
-    const response = await getModel().invoke([
+    const response = await getModel().bindTools(calendarTools).invoke([
       new SystemMessage(buildSystemPrompt({ timezone: getTimezoneFromConfig(config) })),
       ...state.messages,
     ]);
 
     return { messages: [stampMessage(response)] };
   })
+  .addNode("tools", toolNode)
   .addEdge("__start__", "preprocess")
-  .addEdge("preprocess", "agent");
+  .addEdge("preprocess", "agent")
+  .addConditionalEdges("agent", toolsCondition, ["tools", "__end__"])
+  .addEdge("tools", "agent");
 
 export const graph = workflow.compile();
