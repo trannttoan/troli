@@ -25,10 +25,6 @@ const AgentState = Annotation.Root({
     reducer: messagesStateReducer,
     default: () => [],
   }),
-  llmInputMessages: Annotation<BaseMessage[]>({
-    reducer: (_left, update) => messagesStateReducer([], update),
-    default: () => [],
-  }),
 });
 
 function getModel(): ChatGoogleGenerativeAI {
@@ -55,17 +51,16 @@ function getTimezoneFromConfig(config: LangGraphRunnableConfig): string {
 
 function preprocessMessages(messages: BaseMessage[]): {
   messages: BaseMessage[];
-  llmInputMessages: BaseMessage[];
 } {
   const now = Date.now();
   const stampedMessages = stampLatestHumanMessage(messages, now);
+  const windowedMessages = windowMessages(stampedMessages, { now });
 
   return {
     messages: [
       new RemoveMessage({ id: REMOVE_ALL_MESSAGES }),
-      ...stampedMessages,
+      ...windowedMessages,
     ],
-    llmInputMessages: windowMessages(stampedMessages, { now }),
   };
 }
 
@@ -84,7 +79,7 @@ const workflow = new StateGraph(AgentState)
   .addNode("agent", async (state, config) => {
     const response = await getModel().invoke([
       new SystemMessage(buildSystemPrompt({ timezone: getTimezoneFromConfig(config) })),
-      ...state.llmInputMessages,
+      ...state.messages,
     ]);
 
     return { messages: [stampMessage(response)] };

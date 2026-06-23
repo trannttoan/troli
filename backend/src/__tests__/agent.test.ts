@@ -143,10 +143,10 @@ describe("agent graph", () => {
       expect(getMessageTimestamp(humanMessage!)).toBe(FIXED_TIMESTAMP);
     });
 
-    it("passes only windowed messages to the model", async () => {
+    it("windows the persisted messages before invoking the model", async () => {
       const staleTimestamp = FIXED_TIMESTAMP - 8 * 24 * 60 * 60 * 1000;
 
-      await graph.invoke(
+      const result = await graph.invoke(
         {
           messages: [
             stampMessage(new HumanMessage("stale"), staleTimestamp),
@@ -163,11 +163,16 @@ describe("agent graph", () => {
 
       expect(humanInputs).toHaveLength(1);
       expect(humanInputs[0].content).toBe("recent");
+      expect(
+        result.messages.some(
+          (message: { content: unknown }) => message.content === "stale",
+        ),
+      ).toBe(false);
     });
   });
 
   describe("agent node", () => {
-    it("invokes the model with a SystemMessage and the windowed input", async () => {
+    it("invokes the model with a SystemMessage and the windowed messages", async () => {
       await graph.invoke(
         { messages: [new HumanMessage("Hello")] },
         buildConfig(),
