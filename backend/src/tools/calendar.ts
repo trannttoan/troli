@@ -70,12 +70,27 @@ function buildListCalendarEventsUrl(input: {
   return url.toString();
 }
 
+function exclusiveEndToInclusive(exclusiveEnd: string): string {
+  const date = new Date(exclusiveEnd + "T00:00:00");
+  date.setDate(date.getDate() - 1);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function formatEventDateRange(event: CalendarEvent): string {
   const start = event.start?.dateTime ?? event.start?.date;
   const end = event.end?.dateTime ?? event.end?.date;
 
   if (event.start?.date && !event.start.dateTime) {
-    return end ? `${start} to ${end} (all day)` : `${start} (all day)`;
+    if (!end) {
+      return `${start} (all day)`;
+    }
+    const inclusiveEnd = exclusiveEndToInclusive(end);
+    return inclusiveEnd === start
+      ? `${start} (all day)`
+      : `${start} to ${inclusiveEnd} (all day)`;
   }
 
   if (start && end) {

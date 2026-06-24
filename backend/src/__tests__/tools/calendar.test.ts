@@ -53,7 +53,7 @@ describe("listCalendarEvents", () => {
 
     expect(result).toContain("Calendar events:");
     expect(result).toContain("Team Sync @ Conference Room");
-    expect(result).toContain("2026-01-17 to 2026-01-18 (all day)");
+    expect(result).toContain("2026-01-17 (all day)");
     expect(fetchWithAuth).toHaveBeenCalledWith(
       "https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=2026-01-16T00%3A00%3A00-05%3A00&timeMax=2026-01-18T00%3A00%3A00-05%3A00&q=team",
       expect.objectContaining({ method: "GET" }),
@@ -74,6 +74,26 @@ describe("listCalendarEvents", () => {
         },
       ),
     ).resolves.toBe("No calendar events found.");
+  });
+
+  it("formats a multi-day all-day event with inclusive end date", async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      items: [
+        {
+          id: "event-multi",
+          summary: "Company Retreat",
+          start: { date: "2026-02-10" },
+          end: { date: "2026-02-13" },
+        },
+      ],
+    });
+
+    const result = await listCalendarEvents.invoke(
+      {},
+      { configurable: { access_token: "calendar-access-token" } },
+    );
+
+    expect(result).toContain("2026-02-10 to 2026-02-12 (all day)");
   });
 
   it("rejects when the access token is missing from the run config", async () => {
