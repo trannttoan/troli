@@ -34,6 +34,7 @@ type RefreshResponse = {
 export type GoogleAuthErrorCode =
   | 'cancelled'
   | 'exchange_failed'
+  | 'insufficient_scope'
   | 'missing_refresh_token'
   | 'request_timeout'
   | 'refresh_force_reauth'
@@ -100,6 +101,16 @@ export async function buildSessionFromAuthResponse(
   }
 
   const email = await fetchGoogleUserEmail(response.authentication.accessToken);
+  const grantedScopes = parseGrantedScopes(response.authentication.scope);
+  const missingScopes = GOOGLE_SCOPES.filter((s) => !grantedScopes.includes(s));
+
+  if (missingScopes.length > 0) {
+    throw new GoogleAuthError(
+      'insufficient_scope',
+      'Troli needs calendar access to work. Please sign in again and grant all permissions.',
+      true,
+    );
+  }
 
   return {
     accessToken: response.authentication.accessToken,
@@ -109,8 +120,16 @@ export async function buildSessionFromAuthResponse(
       response.authentication.expiresIn,
     ),
     email,
-    scopes: GOOGLE_SCOPES,
+    scopes: grantedScopes,
   };
+}
+
+export function parseGrantedScopes(scope: string | undefined): string[] {
+  if (!scope || scope.trim() === '') {
+    return [];
+  }
+
+  return scope.trim().split(/\s+/);
 }
 
 export async function refreshGoogleAccessToken(input: {

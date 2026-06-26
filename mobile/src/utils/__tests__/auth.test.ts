@@ -8,6 +8,7 @@ import {
 } from '@jest/globals';
 
 import {
+  GOOGLE_SCOPES,
   GoogleAuthError,
   buildSessionFromAuthResponse,
   isForceReauthError,
@@ -37,6 +38,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+const ALL_SCOPES_STRING = GOOGLE_SCOPES.join(' ');
+
 function successAuthResult(
   overrides: Record<string, unknown> = {},
 ): AuthSessionResult {
@@ -48,6 +51,7 @@ function successAuthResult(
       issuedAt: Math.floor(Date.now() / 1000),
       expiresIn: 3600,
       tokenType: 'Bearer',
+      scope: ALL_SCOPES_STRING,
       ...overrides,
     },
     params: {},
@@ -66,12 +70,7 @@ describe('buildSessionFromAuthResponse', () => {
       email: 'user@example.com',
       expiryAt: expect.any(String),
       refreshToken: 'refresh-token',
-      scopes: [
-        'openid',
-        'https://www.googleapis.com/auth/userinfo.email',
-        'https://www.googleapis.com/auth/userinfo.profile',
-        'https://www.googleapis.com/auth/calendar.events.owned',
-      ],
+      scopes: GOOGLE_SCOPES,
     });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://openidconnect.googleapis.com/v1/userinfo',
@@ -126,6 +125,31 @@ describe('buildSessionFromAuthResponse', () => {
       buildSessionFromAuthResponse(successAuthResult()),
     ).rejects.toMatchObject({
       code: 'userinfo_failed',
+    });
+  });
+
+  it('throws insufficient_scope when granted scopes do not cover all required scopes', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ email: 'user@example.com' }));
+
+    await expect(
+      buildSessionFromAuthResponse(
+        successAuthResult({
+          scope: 'openid https://www.googleapis.com/auth/userinfo.email',
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'insufficient_scope',
+      forceReauth: true,
+    });
+  });
+
+  it('throws insufficient_scope when scope field is missing', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ email: 'user@example.com' }));
+
+    await expect(
+      buildSessionFromAuthResponse(successAuthResult({ scope: undefined })),
+    ).rejects.toMatchObject({
+      code: 'insufficient_scope',
     });
   });
 
