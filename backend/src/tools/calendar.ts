@@ -72,11 +72,11 @@ function buildListCalendarEventsUrl(input: {
 }
 
 function exclusiveEndToInclusive(exclusiveEnd: string): string {
-  const date = new Date(exclusiveEnd + 'T00:00:00');
-  date.setDate(date.getDate() - 1);
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
+  const date = new Date(exclusiveEnd + 'T00:00:00Z');
+  date.setUTCDate(date.getUTCDate() - 1);
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
 
