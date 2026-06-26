@@ -136,4 +136,58 @@ describe('fetchWithAuth', () => {
       status: 503,
     });
   });
+
+  it('returns null for 204 no-content responses', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    const result = await fetchWithAuth(
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/event-1',
+      { method: 'DELETE' },
+      'valid-token',
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it('throws on invalid JSON responses', async () => {
+    fetchMock.mockResolvedValue(new Response('not json {{{', { status: 200 }));
+
+    await expect(
+      fetchWithAuth(
+        'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+        {},
+        'valid-token',
+      ),
+    ).rejects.toMatchObject<GoogleApiError>({
+      code: 'GOOGLE_API_REQUEST_FAILED',
+      retryable: true,
+      status: 502,
+    });
+  });
+
+  it('aborts the request after the configured timeout', async () => {
+    fetchMock.mockImplementation(
+      (_url: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(
+              new DOMException('The operation was aborted.', 'AbortError'),
+            );
+          });
+        }),
+    );
+
+    await expect(
+      fetchWithAuth(
+        'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+        {},
+        'valid-token',
+        { timeoutMs: 50 },
+      ),
+    ).rejects.toMatchObject<GoogleApiError>({
+      code: 'GOOGLE_API_REQUEST_FAILED',
+      retryable: true,
+      status: 503,
+    });
+  });
 });

@@ -1,5 +1,7 @@
 import { TroliAuthError } from './auth.js';
 
+const DEFAULT_TIMEOUT_MS = 10_000;
+
 type GoogleApiErrorCode =
   | 'GOOGLE_API_INSUFFICIENT_SCOPE'
   | 'GOOGLE_API_RATE_LIMITED'
@@ -37,11 +39,16 @@ export async function fetchWithAuth<T>(
   url: string,
   init: RequestInit = {},
   accessToken: string,
-): Promise<T> {
+  { timeoutMs = DEFAULT_TIMEOUT_MS }: { timeoutMs?: number } = {},
+): Promise<T | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     const response = await fetch(url, {
       ...init,
       headers: buildHeaders(init.headers, accessToken),
+      signal: controller.signal,
     });
 
     if (response.status === 401) {
@@ -117,6 +124,8 @@ export async function fetchWithAuth<T>(
     }
 
     throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -131,15 +140,15 @@ function buildHeaders(
   return headers;
 }
 
-async function parseJsonResponse<T>(response: Response): Promise<T> {
+async function parseJsonResponse<T>(response: Response): Promise<T | null> {
   if (response.status === 204) {
-    return null as T;
+    return null;
   }
 
   const responseText = await response.text();
 
   if (responseText.trim() === '') {
-    return null as T;
+    return null;
   }
 
   try {

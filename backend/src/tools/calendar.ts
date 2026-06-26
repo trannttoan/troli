@@ -133,7 +133,7 @@ export const listCalendarEvents = tool(
       accessToken,
     );
 
-    return formatCalendarEvents(response.items ?? []);
+    return formatCalendarEvents(response?.items ?? []);
   },
   {
     name: 'list_calendar_events',
