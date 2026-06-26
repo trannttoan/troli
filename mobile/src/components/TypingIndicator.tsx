@@ -1,10 +1,11 @@
 import { Animated, StyleSheet, View } from 'react-native';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 
 export function TypingIndicator() {
-  const dots = useRef(
-    Array.from({ length: 3 }, () => new Animated.Value(0.28)),
-  ).current;
+  const dots = useMemo(
+    () => Array.from({ length: 3 }, () => new Animated.Value(0.28)),
+    [],
+  );
 
   useEffect(() => {
     const animation = Animated.loop(
