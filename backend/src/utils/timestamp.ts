@@ -2,14 +2,14 @@ import {
   BaseMessage,
   HumanMessage,
   mapStoredMessageToChatMessage,
-} from "@langchain/core/messages";
+} from '@langchain/core/messages';
 
-export const MESSAGE_TIMESTAMP_KEY = "timestamp";
+export const MESSAGE_TIMESTAMP_KEY = 'timestamp';
 
 export function getMessageTimestamp(message: BaseMessage): number | null {
   const timestamp = message.additional_kwargs[MESSAGE_TIMESTAMP_KEY];
 
-  return typeof timestamp === "number" && Number.isFinite(timestamp)
+  return typeof timestamp === 'number' && Number.isFinite(timestamp)
     ? timestamp
     : null;
 }

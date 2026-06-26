@@ -116,14 +116,10 @@ describe('consumeSseStream', () => {
       onEvent: async (event) => {
         events.push(event);
       },
-      response: createStreamingResponse([
-        'event: ping\r\ndata: pong\r\n\r\n',
-      ]),
+      response: createStreamingResponse(['event: ping\r\ndata: pong\r\n\r\n']),
     });
 
-    expect(events).toEqual([
-      { data: 'pong', event: 'ping', id: undefined },
-    ]);
+    expect(events).toEqual([{ data: 'pong', event: 'ping', id: undefined }]);
   });
 
   it('emits no events for an empty stream', async () => {

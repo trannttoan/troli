@@ -37,14 +37,14 @@ The client never calls Google product APIs (Calendar, Tasks, Gmail) directly. OA
 
 ### 2.1 Tech Stack
 
-| Aspect | Choice |
-|---|---|
-| Framework | React Native with Expo (managed workflow) |
-| Language | TypeScript |
-| Min iOS Version | iOS 16+ |
-| Auth Library | `expo-auth-session` (Google OAuth 2.0 with PKCE) |
-| Token Storage | `expo-secure-store` (Keychain, `AFTER_FIRST_UNLOCK`) |
-| HTTP Client | `fetch` with SSE support for streaming |
+| Aspect           | Choice                                                                           |
+| ---------------- | -------------------------------------------------------------------------------- |
+| Framework        | React Native with Expo (managed workflow)                                        |
+| Language         | TypeScript                                                                       |
+| Min iOS Version  | iOS 16+                                                                          |
+| Auth Library     | `expo-auth-session` (Google OAuth 2.0 with PKCE)                                 |
+| Token Storage    | `expo-secure-store` (Keychain, `AFTER_FIRST_UNLOCK`)                             |
+| HTTP Client      | `fetch` with SSE support for streaming                                           |
 | State Management | Zustand (selective subscriptions, works outside React components for auth logic) |
 
 ### 2.2 Authentication
@@ -60,19 +60,19 @@ The client initiates the OAuth 2.0 authorization code flow with PKCE via `expo-a
 
 **Token storage keys:**
 
-| SecureStore Key | Value | Purpose |
-|---|---|---|
-| `auth_access_token` | Google OAuth access token | Passed to backend per request |
-| `auth_refresh_token` | Google OAuth refresh token | Silent token renewal |
-| `auth_token_expiry` | ISO 8601 timestamp | Determines when refresh is needed |
-| `auth_user_email` | Google account email | Display in UI |
+| SecureStore Key      | Value                      | Purpose                           |
+| -------------------- | -------------------------- | --------------------------------- |
+| `auth_access_token`  | Google OAuth access token  | Passed to backend per request     |
+| `auth_refresh_token` | Google OAuth refresh token | Silent token renewal              |
+| `auth_token_expiry`  | ISO 8601 timestamp         | Determines when refresh is needed |
+| `auth_user_email`    | Google account email       | Display in UI                     |
 
 **Token lifecycle:**
 
-| Token | Lifespan | Renewal |
-|---|---|---|
-| Access token | ~1 hour | Silent refresh using the refresh token before each API call if expired |
-| Refresh token | Long-lived (months/years) | No renewal; revocation requires re-auth |
+| Token         | Lifespan                  | Renewal                                                                |
+| ------------- | ------------------------- | ---------------------------------------------------------------------- |
+| Access token  | ~1 hour                   | Silent refresh using the refresh token before each API call if expired |
+| Refresh token | Long-lived (months/years) | No renewal; revocation requires re-auth                                |
 
 **Silent refresh flow:** Before each backend call, check the stored expiry. Apply a 5-minute buffer — if the token expires within 5 minutes, refresh preemptively. Use a promise-based mutex to prevent concurrent refresh requests.
 
@@ -111,15 +111,15 @@ The client communicates with the backend via two patterns:
 
 ### 3.1 Tech Stack
 
-| Aspect | Choice |
-|---|---|
-| Runtime | Node.js (LTS) |
-| Language | TypeScript |
-| Agent Framework | LangGraph.js (`@langchain/langgraph`) |
-| Agent Pattern | ReAct agent with tool-calling |
-| Hosting | LangGraph Cloud (v1.0). AWS migration planned for scale. |
-| State Persistence | PostgreSQL checkpointer (managed by LangGraph Cloud) |
-| Observability | LangSmith |
+| Aspect            | Choice                                                   |
+| ----------------- | -------------------------------------------------------- |
+| Runtime           | Node.js (LTS)                                            |
+| Language          | TypeScript                                               |
+| Agent Framework   | LangGraph.js (`@langchain/langgraph`)                    |
+| Agent Pattern     | ReAct agent with tool-calling                            |
+| Hosting           | LangGraph Cloud (v1.0). AWS migration planned for scale. |
+| State Persistence | PostgreSQL checkpointer (managed by LangGraph Cloud)     |
+| Observability     | LangSmith                                                |
 
 ### 3.2 LLM Configuration
 
@@ -127,28 +127,31 @@ LangGraph.js is model-agnostic. The LLM is injected at configuration time.
 
 ```typescript
 // Google (v1.0)
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-const model = new ChatGoogleGenerativeAI({ model: "gemini-2.5-flash-lite", temperature: 0 });
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+const model = new ChatGoogleGenerativeAI({
+  model: 'gemini-2.5-flash-lite',
+  temperature: 0,
+});
 
 // OpenAI (alternative)
-import { ChatOpenAI } from "@langchain/openai";
-const model = new ChatOpenAI({ model: "gpt-4o", temperature: 0 });
+import { ChatOpenAI } from '@langchain/openai';
+const model = new ChatOpenAI({ model: 'gpt-4o', temperature: 0 });
 
 // Anthropic (alternative)
-import { ChatAnthropic } from "@langchain/anthropic";
-const model = new ChatAnthropic({ model: "claude-sonnet-4-6", temperature: 0 });
+import { ChatAnthropic } from '@langchain/anthropic';
+const model = new ChatAnthropic({ model: 'claude-sonnet-4-6', temperature: 0 });
 ```
 
 All three providers implement the same `BaseChatModel` interface. Switching providers is a one-line change — no refactoring required.
 
 **Model selection strategy:**
 
-| Phase | Model Strategy |
-|---|---|
-| v1.0 Development | Gemini 2.5 Flash-Lite. Best cost-to-capability ratio for a tool-calling conversational agent. |
-| Fallback | GPT-4o or Claude Sonnet if Flash-Lite's tool-calling accuracy proves insufficient. Swap is a one-line config change. |
-| Cost Optimization | Evaluate dual-model routing: cheap model for simple reads, capable model for complex reasoning and writes. |
-| Future | Evaluate open-source models (Llama, Mistral) via Ollama for self-hosted inference. |
+| Phase             | Model Strategy                                                                                                       |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------- |
+| v1.0 Development  | Gemini 2.5 Flash-Lite. Best cost-to-capability ratio for a tool-calling conversational agent.                        |
+| Fallback          | GPT-4o or Claude Sonnet if Flash-Lite's tool-calling accuracy proves insufficient. Swap is a one-line config change. |
+| Cost Optimization | Evaluate dual-model routing: cheap model for simple reads, capable model for complex reasoning and writes.           |
+| Future            | Evaluate open-source models (Llama, Mistral) via Ollama for self-hosted inference.                                   |
 
 ### 3.3 Agent Graph
 
@@ -194,34 +197,34 @@ Each Google API operation is a LangGraph tool defined with Zod schemas. Tools ar
 
 **Calendar tools:**
 
-| Tool Name | Type | HITL | Parameters |
-|---|---|---|---|
-| `list_calendar_events` | Read | Auto | `timeMin`, `timeMax`, `query` (optional) |
-| `get_calendar_event` | Read | Auto | `eventId` |
-| `create_calendar_event` | Write | Auto | `summary`, `startDateTime`, `endDateTime`, `startDate` (optional, YYYY-MM-DD for all-day), `endDate` (optional, YYYY-MM-DD for all-day), `location` (optional), `description` (optional), `attendees` (optional, array of emails) |
-| `update_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single`, `thisAndFollowing`, or `all`, required for recurring events), plus any fields to update (including `startDate`/`endDate` for all-day events) |
-| `delete_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single`, `thisAndFollowing`, or `all`, required for recurring events) |
+| Tool Name               | Type  | HITL      | Parameters                                                                                                                                                                                                                        |
+| ----------------------- | ----- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_calendar_events`  | Read  | Auto      | `timeMin`, `timeMax`, `query` (optional)                                                                                                                                                                                          |
+| `get_calendar_event`    | Read  | Auto      | `eventId`                                                                                                                                                                                                                         |
+| `create_calendar_event` | Write | Auto      | `summary`, `startDateTime`, `endDateTime`, `startDate` (optional, YYYY-MM-DD for all-day), `endDate` (optional, YYYY-MM-DD for all-day), `location` (optional), `description` (optional), `attendees` (optional, array of emails) |
+| `update_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single`, `thisAndFollowing`, or `all`, required for recurring events), plus any fields to update (including `startDate`/`endDate` for all-day events)                                          |
+| `delete_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single`, `thisAndFollowing`, or `all`, required for recurring events)                                                                                                                          |
 
 **Tasks tools:**
 
-| Tool Name | Type | HITL | Parameters |
-|---|---|---|---|
-| `list_task_lists` | Read | Auto | None |
-| `list_tasks` | Read | Auto | `taskListId` |
-| `get_task` | Read | Auto | `taskListId`, `taskId` |
-| `create_task` | Write | Auto | `taskListId`, `title`, `due` (optional), `notes` (optional) |
-| `update_task` | Write | Interrupt | `taskListId`, `taskId`, plus fields to update |
-| `delete_task` | Write | Interrupt | `taskListId`, `taskId` |
+| Tool Name         | Type  | HITL      | Parameters                                                  |
+| ----------------- | ----- | --------- | ----------------------------------------------------------- |
+| `list_task_lists` | Read  | Auto      | None                                                        |
+| `list_tasks`      | Read  | Auto      | `taskListId`                                                |
+| `get_task`        | Read  | Auto      | `taskListId`, `taskId`                                      |
+| `create_task`     | Write | Auto      | `taskListId`, `title`, `due` (optional), `notes` (optional) |
+| `update_task`     | Write | Interrupt | `taskListId`, `taskId`, plus fields to update               |
+| `delete_task`     | Write | Interrupt | `taskListId`, `taskId`                                      |
 
 **Gmail tools:**
 
-| Tool Name | Type | HITL | Parameters |
-|---|---|---|---|
-| `search_gmail` | Read | Auto | `query` (Gmail search syntax), `maxResults` |
+| Tool Name              | Type | HITL | Parameters                                  |
+| ---------------------- | ---- | ---- | ------------------------------------------- |
+| `search_gmail`         | Read | Auto | `query` (Gmail search syntax), `maxResults` |
 | `search_gmail_threads` | Read | Auto | `query` (Gmail search syntax), `maxResults` |
-| `get_gmail_message` | Read | Auto | `messageId` |
-| `get_gmail_thread` | Read | Auto | `threadId` |
-| `list_gmail_labels` | Read | Auto | None |
+| `get_gmail_message`    | Read | Auto | `messageId`                                 |
+| `get_gmail_thread`     | Read | Auto | `threadId`                                  |
+| `list_gmail_labels`    | Read | Auto | None                                        |
 
 ### 3.5 Human-in-the-Loop Implementation
 
@@ -236,33 +239,37 @@ const update_calendar_event = tool(
 
     // Pause for approval
     const decision = interrupt({
-      action: "update_calendar_event",
+      action: 'update_calendar_event',
       description: `Update "${current.summary}": ${formatChanges(current, updates)}`,
       current: current,
       proposed: updates,
     });
 
-    if (decision === "reject") {
-      return "Update cancelled by user.";
+    if (decision === 'reject') {
+      return 'Update cancelled by user.';
     }
 
     // Execute the update
-    return await executeUpdate(eventId, updates, config.configurable.accessToken);
+    return await executeUpdate(
+      eventId,
+      updates,
+      config.configurable.accessToken,
+    );
   },
   {
-    name: "update_calendar_event",
-    description: "Update an existing calendar event. Requires user approval.",
+    name: 'update_calendar_event',
+    description: 'Update an existing calendar event. Requires user approval.',
     schema: z.object({
       eventId: z.string(),
       summary: z.string().optional(),
       startDateTime: z.string().optional(),
       endDateTime: z.string().optional(),
       startDate: z.string().optional(), // YYYY-MM-DD for all-day events
-      endDate: z.string().optional(),   // YYYY-MM-DD for all-day events
+      endDate: z.string().optional(), // YYYY-MM-DD for all-day events
       location: z.string().optional(),
       description: z.string().optional(),
     }),
-  }
+  },
 );
 ```
 
@@ -322,9 +329,12 @@ This approach is infrastructure-agnostic (works on LangGraph Cloud and AWS) and 
 ```typescript
 const MAX_MESSAGES = 200;
 
-function windowMessages(messages: BaseMessage[], windowDays: number = 7): BaseMessage[] {
+function windowMessages(
+  messages: BaseMessage[],
+  windowDays: number = 7,
+): BaseMessage[] {
   const cutoff = Date.now() - windowDays * 24 * 60 * 60 * 1000;
-  const windowed = messages.filter(msg => {
+  const windowed = messages.filter((msg) => {
     const timestamp = msg.additional_kwargs?.timestamp;
     return timestamp != null && timestamp >= cutoff;
   });
@@ -347,6 +357,7 @@ Agent memory is deferred to post-v1.0. In v1.0, the agent operates only with the
 LangGraph Cloud is the hosting choice for v1.0. It provides managed deployment of LangGraph agents with built-in checkpointing, streaming, and HITL support.
 
 **What LangGraph Cloud handles:**
+
 - Deploying the agent from a LangGraph project definition.
 - PostgreSQL-backed checkpointing for thread state and interrupts.
 - SSE streaming endpoint for real-time agent output.
@@ -354,6 +365,7 @@ LangGraph Cloud is the hosting choice for v1.0. It provides managed deployment o
 - Automatic LangSmith integration.
 
 **What you still manage:**
+
 - The LangGraph agent code (tools, graph definition, system prompt).
 - Google API tool implementations.
 - The mobile client.
@@ -364,13 +376,13 @@ LangGraph Cloud is the hosting choice for v1.0. It provides managed deployment o
 
 When scaling beyond personal use, migrate the backend to AWS for cost control and flexibility.
 
-| Component | AWS Service |
-|---|---|
-| Agent runtime | ECS Fargate or EC2 |
+| Component         | AWS Service                               |
+| ----------------- | ----------------------------------------- |
+| Agent runtime     | ECS Fargate or EC2                        |
 | State persistence | RDS PostgreSQL (for `AsyncPostgresSaver`) |
-| API gateway | ALB + Express/Fastify |
-| Secrets | AWS Secrets Manager |
-| CI/CD | GitHub Actions → ECR → ECS |
+| API gateway       | ALB + Express/Fastify                     |
+| Secrets           | AWS Secrets Manager                       |
+| CI/CD             | GitHub Actions → ECR → ECS                |
 
 The migration path is straightforward because LangGraph.js runs on any Node.js environment. The main work is setting up the PostgreSQL checkpointer, SSE streaming endpoint, and the thread management API that LangGraph Cloud currently provides for free.
 
@@ -387,6 +399,7 @@ LANGSMITH_PROJECT=troli-v1
 ```
 
 **What gets traced:**
+
 - Every LLM call (prompt, response, token count, latency, model name).
 - Every tool call (tool name, input arguments, output, duration).
 - HITL interrupts (what was proposed, what the user decided, response time).
@@ -394,6 +407,7 @@ LANGSMITH_PROJECT=troli-v1
 - Full conversation thread replay for debugging.
 
 **Key metrics to monitor:**
+
 - Average tokens per conversation turn (cost tracking).
 - Tool call success/failure rate.
 - HITL approval vs. rejection rate (high rejection rate suggests the agent is making bad proposals).
@@ -405,11 +419,11 @@ LANGSMITH_PROJECT=troli-v1
 
 The backend exposes these endpoints to the mobile client. When using LangGraph Cloud, most of these are provided out of the box.
 
-| Method | Path | Purpose |
-|---|---|---|
-| POST | `/threads` | Create a new thread for a user |
-| GET | `/threads/{thread_id}` | Get thread state (messages, status) |
-| POST | `/threads/{thread_id}/runs` | Send a user message or resume after HITL. Returns SSE stream. |
+| Method | Path                        | Purpose                                                       |
+| ------ | --------------------------- | ------------------------------------------------------------- |
+| POST   | `/threads`                  | Create a new thread for a user                                |
+| GET    | `/threads/{thread_id}`      | Get thread state (messages, status)                           |
+| POST   | `/threads/{thread_id}/runs` | Send a user message or resume after HITL. Returns SSE stream. |
 
 The client includes the user's Google access token in the `Authorization` header of every request. The backend extracts it and passes it to tool functions for Google API calls.
 
@@ -429,6 +443,7 @@ The client includes the user's Google access token in the `Authorization` header
 **Base URL:** `https://www.googleapis.com/calendar/v3`
 
 Key endpoints:
+
 - `GET /calendars/primary/events` — list events with `timeMin`, `timeMax`, `singleEvents=true`, `orderBy=startTime`.
 - `GET /calendars/primary/events/{eventId}` — get single event.
 - `POST /calendars/primary/events` — create event.
@@ -444,6 +459,7 @@ v1.0 uses the primary calendar only. The `calendar.events.owned` scope restricts
 **Base URL:** `https://www.googleapis.com/tasks/v1`
 
 Key endpoints:
+
 - `GET /users/@me/lists` — list task lists.
 - `GET /lists/{taskListId}/tasks` — list tasks in a list.
 - `GET /lists/{taskListId}/tasks/{taskId}` — get single task.
@@ -458,6 +474,7 @@ To mark a task as complete, PATCH with `status: "completed"`.
 **Base URL:** `https://www.googleapis.com/gmail/v1`
 
 Key endpoints:
+
 - `GET /users/me/messages` — list messages with `q` parameter for search.
 - `GET /users/me/messages/{messageId}` — get full message.
 - `GET /users/me/threads` — list threads.
@@ -469,6 +486,7 @@ Gmail message bodies are base64url-encoded. The tool implementation must decode 
 ### 7.4 Shared HTTP Helper
 
 All Google API calls go through a shared `fetchWithAuth` function that:
+
 - Sets the `Authorization: Bearer {accessToken}` header.
 - Handles 401 responses by returning an error that tells the client to refresh the token and retry.
 - Handles 429 (rate limit) by returning a user-friendly error.
@@ -513,12 +531,12 @@ typescript
 
 ### External Services
 
-| Service | Purpose | Free Tier |
-|---|---|---|
-| Google Cloud | OAuth + Calendar/Tasks/Gmail APIs | Free for personal use |
+| Service            | Purpose                               | Free Tier                                 |
+| ------------------ | ------------------------------------- | ----------------------------------------- |
+| Google Cloud       | OAuth + Calendar/Tasks/Gmail APIs     | Free for personal use                     |
 | Google AI (Gemini) | LLM API (v1.0: Gemini 2.5 Flash-Lite) | Free tier available; pay per token beyond |
-| LangGraph Cloud | Agent hosting | Free tier available for development |
-| LangSmith | Tracing and observability | Free tier available |
+| LangGraph Cloud    | Agent hosting                         | Free tier available for development       |
+| LangSmith          | Tracing and observability             | Free tier available                       |
 
 ---
 
@@ -526,20 +544,20 @@ typescript
 
 ### 10.1 Backend (Vitest)
 
-| Layer | What to Test | Approach |
-|---|---|---|
-| Tool unit tests | Each Google API tool in isolation | Mock `fetchWithAuth` responses. Verify correct API calls, parameter mapping, error handling. |
-| HITL flow | Interrupt/resume cycle for update and delete tools | Use LangGraph's test utilities to simulate interrupt and resume with approve/reject. |
+| Layer             | What to Test                                         | Approach                                                                                          |
+| ----------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Tool unit tests   | Each Google API tool in isolation                    | Mock `fetchWithAuth` responses. Verify correct API calls, parameter mapping, error handling.      |
+| HITL flow         | Interrupt/resume cycle for update and delete tools   | Use LangGraph's test utilities to simulate interrupt and resume with approve/reject.              |
 | Agent integration | Full graph execution for representative user queries | Mock all Google API responses. Assert the agent selects the correct tool with correct parameters. |
-| Message windowing | 7-day filter and hard cap | Unit test `windowMessages` with synthetic message arrays. |
+| Message windowing | 7-day filter and hard cap                            | Unit test `windowMessages` with synthetic message arrays.                                         |
 
 ### 10.2 Mobile Client (React Native Testing Library)
 
-| Layer | What to Test | Approach |
-|---|---|---|
-| Components | Chat bubbles, approval cards, input bar | Render with test data. Verify approve/reject callbacks, disabled state during processing. |
-| Auth flow | Token storage, silent refresh, sign-out | Mock `expo-secure-store` and `expo-auth-session`. Verify token lifecycle. |
-| SSE handling | Stream parsing, interrupt detection | Mock SSE responses. Verify messages render incrementally and approval cards appear on interrupt. |
+| Layer        | What to Test                            | Approach                                                                                         |
+| ------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Components   | Chat bubbles, approval cards, input bar | Render with test data. Verify approve/reject callbacks, disabled state during processing.        |
+| Auth flow    | Token storage, silent refresh, sign-out | Mock `expo-secure-store` and `expo-auth-session`. Verify token lifecycle.                        |
+| SSE handling | Stream parsing, interrupt detection     | Mock SSE responses. Verify messages render incrementally and approval cards appear on interrupt. |
 
 ### 10.3 Deferred to Post-v1.0
 
@@ -550,12 +568,12 @@ typescript
 
 ## 11. Resolved Technical Questions
 
-| # | Question | Resolution |
-|---|---|---|
-| 1 | How to handle the 7-day message pruning? Background job, or inline? | Inline — prune in the graph, not in storage. A preprocessing step filters messages to the past 7 days before passing them to the LLM. Full history stays in PostgreSQL for debugging and future profile building (post-v1.0). See Section 3.7. |
-| 2 | Should the backend validate the Google access token proactively, or let tools fail and handle 401s reactively? | Hybrid. The backend validates the Google access token proactively via tokeninfo on each request (for authentication and thread authorization — see Section 8). Google API 401s from tools are still handled reactively as a fallback for edge cases (mid-request token revocation). The tool returns a typed error so the client knows to trigger re-auth. |
-| 3 | Can LangGraph Cloud handle custom message pruning? | Not needed. Pruning happens at the graph level (a state reducer filters messages before the LLM sees them), not at the storage level. This works on any infrastructure — LangGraph Cloud, AWS, whatever. See Section 3.7. |
-| 4 | GPT-4o or Claude Sonnet? | Gemini 2.5 Flash-Lite for v1.0. Best cost-to-capability ratio. The architecture is provider-agnostic via LangChain's `BaseChatModel` interface — swapping to GPT-4o or Claude Sonnet is a one-line config change if Flash-Lite's tool-calling accuracy proves insufficient. See Section 3.2. |
+| #   | Question                                                                                                       | Resolution                                                                                                                                                                                                                                                                                                                                                 |
+| --- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | How to handle the 7-day message pruning? Background job, or inline?                                            | Inline — prune in the graph, not in storage. A preprocessing step filters messages to the past 7 days before passing them to the LLM. Full history stays in PostgreSQL for debugging and future profile building (post-v1.0). See Section 3.7.                                                                                                             |
+| 2   | Should the backend validate the Google access token proactively, or let tools fail and handle 401s reactively? | Hybrid. The backend validates the Google access token proactively via tokeninfo on each request (for authentication and thread authorization — see Section 8). Google API 401s from tools are still handled reactively as a fallback for edge cases (mid-request token revocation). The tool returns a typed error so the client knows to trigger re-auth. |
+| 3   | Can LangGraph Cloud handle custom message pruning?                                                             | Not needed. Pruning happens at the graph level (a state reducer filters messages before the LLM sees them), not at the storage level. This works on any infrastructure — LangGraph Cloud, AWS, whatever. See Section 3.7.                                                                                                                                  |
+| 4   | GPT-4o or Claude Sonnet?                                                                                       | Gemini 2.5 Flash-Lite for v1.0. Best cost-to-capability ratio. The architecture is provider-agnostic via LangChain's `BaseChatModel` interface — swapping to GPT-4o or Claude Sonnet is a one-line config change if Flash-Lite's tool-calling accuracy proves insufficient. See Section 3.2.                                                               |
 
 ## 12. Open Technical Questions
 

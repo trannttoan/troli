@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
 
 import {
   GoogleAuthError,
@@ -30,7 +37,9 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function successAuthResult(overrides: Record<string, unknown> = {}): AuthSessionResult {
+function successAuthResult(
+  overrides: Record<string, unknown> = {},
+): AuthSessionResult {
   return {
     type: 'success',
     authentication: {
@@ -113,7 +122,9 @@ describe('buildSessionFromAuthResponse', () => {
   it('throws userinfo_failed when userinfo endpoint returns non-ok', async () => {
     fetchMock.mockResolvedValue(jsonResponse({}, 403));
 
-    await expect(buildSessionFromAuthResponse(successAuthResult())).rejects.toMatchObject({
+    await expect(
+      buildSessionFromAuthResponse(successAuthResult()),
+    ).rejects.toMatchObject({
       code: 'userinfo_failed',
     });
   });
@@ -121,7 +132,9 @@ describe('buildSessionFromAuthResponse', () => {
   it('throws userinfo_failed when response has no email', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ sub: '123' }));
 
-    await expect(buildSessionFromAuthResponse(successAuthResult())).rejects.toMatchObject({
+    await expect(
+      buildSessionFromAuthResponse(successAuthResult()),
+    ).rejects.toMatchObject({
       code: 'userinfo_failed',
       message: expect.stringContaining('email'),
     });
@@ -129,7 +142,10 @@ describe('buildSessionFromAuthResponse', () => {
 });
 
 describe('refreshGoogleAccessToken', () => {
-  const refreshInput = { clientId: 'ios-client-id', refreshToken: 'refresh-token' };
+  const refreshInput = {
+    clientId: 'ios-client-id',
+    refreshToken: 'refresh-token',
+  };
 
   it('returns fresh tokens on success', async () => {
     fetchMock.mockResolvedValue(
@@ -182,7 +198,9 @@ describe('refreshGoogleAccessToken', () => {
   });
 
   it('throws refresh_transient on 5xx', async () => {
-    fetchMock.mockResolvedValue(new Response('Internal Server Error', { status: 500 }));
+    fetchMock.mockResolvedValue(
+      new Response('Internal Server Error', { status: 500 }),
+    );
 
     await expect(refreshGoogleAccessToken(refreshInput)).rejects.toMatchObject({
       code: 'refresh_transient',
@@ -199,7 +217,9 @@ describe('refreshGoogleAccessToken', () => {
   });
 
   it('throws refresh_timeout on AbortError', async () => {
-    fetchMock.mockRejectedValue(new DOMException('The operation was aborted.', 'AbortError'));
+    fetchMock.mockRejectedValue(
+      new DOMException('The operation was aborted.', 'AbortError'),
+    );
 
     await expect(refreshGoogleAccessToken(refreshInput)).rejects.toMatchObject({
       code: 'refresh_timeout',
@@ -217,11 +237,17 @@ describe('refreshGoogleAccessToken', () => {
 
 describe('error type guards', () => {
   it('isForceReauthError returns true for forceReauth errors', () => {
-    expect(isForceReauthError(new GoogleAuthError('refresh_force_reauth', 'x', true))).toBe(true);
+    expect(
+      isForceReauthError(
+        new GoogleAuthError('refresh_force_reauth', 'x', true),
+      ),
+    ).toBe(true);
   });
 
   it('isForceReauthError returns false for other GoogleAuthErrors', () => {
-    expect(isForceReauthError(new GoogleAuthError('refresh_transient', 'x'))).toBe(false);
+    expect(
+      isForceReauthError(new GoogleAuthError('refresh_transient', 'x')),
+    ).toBe(false);
   });
 
   it('isForceReauthError returns false for plain errors', () => {
@@ -229,10 +255,14 @@ describe('error type guards', () => {
   });
 
   it('isRefreshTimeoutError returns true for refresh_timeout', () => {
-    expect(isRefreshTimeoutError(new GoogleAuthError('refresh_timeout', 'x'))).toBe(true);
+    expect(
+      isRefreshTimeoutError(new GoogleAuthError('refresh_timeout', 'x')),
+    ).toBe(true);
   });
 
   it('isRefreshTimeoutError returns false for other codes', () => {
-    expect(isRefreshTimeoutError(new GoogleAuthError('refresh_transient', 'x'))).toBe(false);
+    expect(
+      isRefreshTimeoutError(new GoogleAuthError('refresh_transient', 'x')),
+    ).toBe(false);
   });
 });

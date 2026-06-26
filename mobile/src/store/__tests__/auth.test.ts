@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
 
 jest.mock('expo-secure-store', () => ({
   AFTER_FIRST_UNLOCK: 'after-first-unlock',
@@ -15,9 +22,12 @@ jest.mock('../../utils/auth', () => ({
     'https://www.googleapis.com/auth/calendar.events.owned',
   ],
   getGoogleIosClientId: jest.fn(() => 'ios-client-id'),
-  isForceReauthError: jest.fn((error: unknown) => (error as { code?: string })?.code === 'force'),
+  isForceReauthError: jest.fn(
+    (error: unknown) => (error as { code?: string })?.code === 'force',
+  ),
   isRefreshTimeoutError: jest.fn(
-    (error: unknown) => (error as { code?: string })?.code === 'refresh_timeout',
+    (error: unknown) =>
+      (error as { code?: string })?.code === 'refresh_timeout',
   ),
   refreshGoogleAccessToken: jest.fn(),
 }));
@@ -47,7 +57,8 @@ async function loadAuthModule(): Promise<LoadedAuthModule> {
   return {
     authStore: require('../auth') as typeof import('../auth'),
     authUtils: require('../../utils/auth') as typeof import('../../utils/auth'),
-    secureStore: require('expo-secure-store') as typeof import('expo-secure-store'),
+    secureStore:
+      require('expo-secure-store') as typeof import('expo-secure-store'),
   };
 }
 
@@ -62,7 +73,9 @@ describe('useAuthStore', () => {
 
   it('refreshes the token when it expires within five minutes', async () => {
     const { authStore, authUtils } = await loadAuthModule();
-    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+    const refreshGoogleAccessToken = jest.mocked(
+      authUtils.refreshGoogleAccessToken,
+    );
 
     refreshGoogleAccessToken.mockResolvedValue({
       accessToken: 'fresh-access-token',
@@ -75,9 +88,9 @@ describe('useAuthStore', () => {
       expiryAt: new Date(Date.now() + 4 * 60 * 1000).toISOString(),
     });
 
-    await expect(authStore.useAuthStore.getState().getValidToken()).resolves.toBe(
-      'fresh-access-token',
-    );
+    await expect(
+      authStore.useAuthStore.getState().getValidToken(),
+    ).resolves.toBe('fresh-access-token');
     expect(refreshGoogleAccessToken).toHaveBeenCalledTimes(1);
     expect(refreshGoogleAccessToken).toHaveBeenCalledWith({
       clientId: 'ios-client-id',
@@ -92,7 +105,9 @@ describe('useAuthStore', () => {
 
   it('deduplicates concurrent refreshes behind a shared mutex', async () => {
     const { authStore, authUtils } = await loadAuthModule();
-    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+    const refreshGoogleAccessToken = jest.mocked(
+      authUtils.refreshGoogleAccessToken,
+    );
     let resolveRefresh:
       | ((value: {
           accessToken: string;
@@ -153,13 +168,15 @@ describe('useAuthStore', () => {
 
   it('returns the current token without refreshing when it is still valid', async () => {
     const { authStore, authUtils } = await loadAuthModule();
-    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+    const refreshGoogleAccessToken = jest.mocked(
+      authUtils.refreshGoogleAccessToken,
+    );
 
     await authStore.useAuthStore.getState().signIn(baseSession);
 
-    await expect(authStore.useAuthStore.getState().getValidToken()).resolves.toBe(
-      'initial-access-token',
-    );
+    await expect(
+      authStore.useAuthStore.getState().getValidToken(),
+    ).resolves.toBe('initial-access-token');
     expect(refreshGoogleAccessToken).not.toHaveBeenCalled();
   });
 
@@ -168,26 +185,33 @@ describe('useAuthStore', () => {
 
     authStore.useAuthStore.setState({ status: 'signed_out' });
 
-    await expect(authStore.useAuthStore.getState().getValidToken()).rejects.toThrow(
-      'User is not authenticated.',
-    );
+    await expect(
+      authStore.useAuthStore.getState().getValidToken(),
+    ).rejects.toThrow('User is not authenticated.');
   });
 
   it('signs out when refresh fails with a force-reauth error', async () => {
     const { authStore, authUtils } = await loadAuthModule();
-    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+    const refreshGoogleAccessToken = jest.mocked(
+      authUtils.refreshGoogleAccessToken,
+    );
     const resetChatState = jest.fn();
 
     authStore.__setLoadChatStoreModuleForTest(async () => ({ resetChatState }));
 
-    refreshGoogleAccessToken.mockRejectedValue({ code: 'force', message: 'Reauth required' });
+    refreshGoogleAccessToken.mockRejectedValue({
+      code: 'force',
+      message: 'Reauth required',
+    });
 
     await authStore.useAuthStore.getState().signIn({
       ...baseSession,
       expiryAt: new Date(Date.now() + 60_000).toISOString(),
     });
 
-    await expect(authStore.useAuthStore.getState().getValidToken()).rejects.toBeDefined();
+    await expect(
+      authStore.useAuthStore.getState().getValidToken(),
+    ).rejects.toBeDefined();
 
     expect(authStore.useAuthStore.getState().status).toBe('signed_out');
     expect(resetChatState).toHaveBeenCalledTimes(1);
@@ -197,7 +221,9 @@ describe('useAuthStore', () => {
 
   it('sets errorMessage without signing out on a non-fatal refresh error', async () => {
     const { authStore, authUtils } = await loadAuthModule();
-    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+    const refreshGoogleAccessToken = jest.mocked(
+      authUtils.refreshGoogleAccessToken,
+    );
 
     refreshGoogleAccessToken.mockRejectedValue(new Error('Network error'));
 
@@ -206,12 +232,14 @@ describe('useAuthStore', () => {
       expiryAt: new Date(Date.now() + 60_000).toISOString(),
     });
 
-    await expect(authStore.useAuthStore.getState().getValidToken()).rejects.toThrow(
-      'Network error',
-    );
+    await expect(
+      authStore.useAuthStore.getState().getValidToken(),
+    ).rejects.toThrow('Network error');
 
     expect(authStore.useAuthStore.getState().status).toBe('signed_in');
-    expect(authStore.useAuthStore.getState().errorMessage).toBe('Network error');
+    expect(authStore.useAuthStore.getState().errorMessage).toBe(
+      'Network error',
+    );
   });
 
   it('clears errorMessage via clearError', async () => {

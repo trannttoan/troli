@@ -15,7 +15,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "verify:cloud": "node ./scripts/verify-langgraph-cloud.mjs",
-    "lint": "echo 'TODO: add linter'"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@langchain/core": "^1.1.48",

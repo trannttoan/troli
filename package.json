@@ -9,6 +9,29 @@
     "dev:mobile": "pnpm --filter @troli/mobile start",
     "dev:backend": "pnpm --filter @troli/backend dev",
     "typecheck": "pnpm -r run typecheck",
-    "lint": "pnpm -r run lint"
+    "lint": "pnpm -r run lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm lint && pnpm typecheck && pnpm -r run test",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,cjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
+    "prettier": "^3.8.4",
+    "typescript-eslint": "^8.62.0"
   }
 }

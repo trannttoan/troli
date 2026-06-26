@@ -162,7 +162,9 @@ async function createThread(threadId: string): Promise<void> {
   });
 }
 
-async function getThreadStatus(threadId: string): Promise<LangGraphThreadStatus> {
+async function getThreadStatus(
+  threadId: string,
+): Promise<LangGraphThreadStatus> {
   const response = await fetchLangGraph<LangGraphThreadResponse>(
     `/threads/${threadId}`,
     {
@@ -191,10 +193,7 @@ async function waitForThreadToSettle(
   return 'error';
 }
 
-async function fetchLangGraph<T>(
-  path: string,
-  init: RequestInit,
-): Promise<T> {
+async function fetchLangGraph<T>(path: string, init: RequestInit): Promise<T> {
   const response = await fetchLangGraphResponse(path, init);
 
   return (await response.json()) as T;
@@ -234,7 +233,9 @@ async function buildLangGraphError(
   if (!contentType.includes('application/json')) {
     const bodyText = (await response.text()).trim();
     return new Error(
-      [bodyText || fallbackMessage, likelyConfigIssue].filter(Boolean).join(' '),
+      [bodyText || fallbackMessage, likelyConfigIssue]
+        .filter(Boolean)
+        .join(' '),
     );
   }
 
@@ -270,10 +271,7 @@ function getLangGraphConfig(): LangGraphConfig {
   };
 }
 
-function buildLikelyConfigIssue(
-  status: number,
-  apiUrl: string,
-): string | null {
+function buildLikelyConfigIssue(status: number, apiUrl: string): string | null {
   if (status !== 404) {
     return null;
   }
@@ -323,7 +321,9 @@ function collectAssistantText(
   }
 
   if (Array.isArray(payload)) {
-    return payload.flatMap((item) => collectAssistantText(item, assistantContext));
+    return payload.flatMap((item) =>
+      collectAssistantText(item, assistantContext),
+    );
   }
 
   if (!isRecord(payload)) {
@@ -340,7 +340,14 @@ function collectAssistantText(
     fragments.push(...flattenTextContent(payload.delta));
   }
 
-  const nestedKeys = ['chunk', 'data', 'kwargs', 'message', 'messages', 'value'];
+  const nestedKeys = [
+    'chunk',
+    'data',
+    'kwargs',
+    'message',
+    'messages',
+    'value',
+  ];
 
   for (const key of nestedKeys) {
     if (key in payload) {
@@ -371,7 +378,9 @@ function extractMessageId(message: unknown): string | null {
   return kwargs && typeof kwargs.id === 'string' ? kwargs.id : null;
 }
 
-function extractMessageRole(message: unknown): HydratedChatMessage['role'] | null {
+function extractMessageRole(
+  message: unknown,
+): HydratedChatMessage['role'] | null {
   const record = getPrimaryRecord(message);
 
   if (!record) {
@@ -393,7 +402,11 @@ function extractRoleValue(
   ];
 
   for (const candidate of candidates) {
-    if (candidate === 'ai' || candidate === 'AIMessage' || candidate === 'AIMessageChunk') {
+    if (
+      candidate === 'ai' ||
+      candidate === 'AIMessage' ||
+      candidate === 'AIMessageChunk'
+    ) {
       return 'assistant';
     }
 
@@ -419,7 +432,9 @@ function extractMessageText(message: unknown): string {
 
   const fragments = [
     ...flattenTextContent(record.content),
-    ...flattenTextContent(isRecord(record.kwargs) ? record.kwargs.content : undefined),
+    ...flattenTextContent(
+      isRecord(record.kwargs) ? record.kwargs.content : undefined,
+    ),
   ];
 
   return fragments.join('').trim();
@@ -434,7 +449,9 @@ function extractMessageTimestamp(message: unknown): number | null {
 
   const candidates = [
     getTimestampValue(record.additional_kwargs),
-    getTimestampValue(isRecord(record.kwargs) ? record.kwargs.additional_kwargs : undefined),
+    getTimestampValue(
+      isRecord(record.kwargs) ? record.kwargs.additional_kwargs : undefined,
+    ),
   ];
 
   return candidates.find((value) => value !== null) ?? null;

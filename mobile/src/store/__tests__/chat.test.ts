@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
 
 jest.mock('../../services/langgraph', () => ({
   bootstrapThread: jest.fn(),
@@ -28,7 +35,8 @@ function loadChatModule(): LoadedChatModule {
 
   return {
     chatStore: require('../chat') as typeof import('../chat'),
-    langgraph: require('../../services/langgraph') as typeof import('../../services/langgraph'),
+    langgraph:
+      require('../../services/langgraph') as typeof import('../../services/langgraph'),
   };
 }
 
@@ -73,7 +81,8 @@ describe('useChatStore', () => {
       let capturedIsBootstrapping = false;
 
       bootstrapThread.mockImplementation(async () => {
-        capturedIsBootstrapping = chatStore.useChatStore.getState().isBootstrapping;
+        capturedIsBootstrapping =
+          chatStore.useChatStore.getState().isBootstrapping;
         return { messages: [], status: 'idle' };
       });
 
@@ -86,11 +95,13 @@ describe('useChatStore', () => {
     it('sets errorMessage on failure and rethrows', async () => {
       const { chatStore, langgraph } = loadChatModule();
 
-      jest.mocked(langgraph.bootstrapThread).mockRejectedValue(new Error('Network error'));
+      jest
+        .mocked(langgraph.bootstrapThread)
+        .mockRejectedValue(new Error('Network error'));
 
-      await expect(chatStore.useChatStore.getState().bootstrapThread()).rejects.toThrow(
-        'Network error',
-      );
+      await expect(
+        chatStore.useChatStore.getState().bootstrapThread(),
+      ).rejects.toThrow('Network error');
 
       const state = chatStore.useChatStore.getState();
 
@@ -106,9 +117,9 @@ describe('useChatStore', () => {
         email: null,
       } as ReturnType<typeof authModule.useAuthStore.getState>);
 
-      await expect(chatStore.useChatStore.getState().bootstrapThread()).rejects.toThrow(
-        'User email is unavailable.',
-      );
+      await expect(
+        chatStore.useChatStore.getState().bootstrapThread(),
+      ).rejects.toThrow('User email is unavailable.');
     });
 
     it('sets errorMessage when bootstrap returns error status', async () => {
@@ -121,7 +132,9 @@ describe('useChatStore', () => {
 
       await chatStore.useChatStore.getState().bootstrapThread();
 
-      expect(chatStore.useChatStore.getState().errorMessage).toMatch(/did not settle cleanly/);
+      expect(chatStore.useChatStore.getState().errorMessage).toMatch(
+        /did not settle cleanly/,
+      );
     });
   });
 
@@ -150,15 +163,21 @@ describe('useChatStore', () => {
       const { chatStore, langgraph } = loadChatModule();
       const streamRun = jest.mocked(langgraph.streamRun);
       const bootstrapThread = jest.mocked(langgraph.bootstrapThread);
-      let capturedMessages: Array<{ role: string; text: string; status?: string }> = [];
+      let capturedMessages: Array<{
+        role: string;
+        text: string;
+        status?: string;
+      }> = [];
 
       streamRun.mockImplementation(async (input) => {
         await input.onAssistantTextSnapshot?.('partial text');
-        capturedMessages = chatStore.useChatStore.getState().messages.map((m) => ({
-          role: m.role,
-          text: m.text,
-          status: m.status,
-        }));
+        capturedMessages = chatStore.useChatStore
+          .getState()
+          .messages.map((m) => ({
+            role: m.role,
+            text: m.text,
+            status: m.status,
+          }));
       });
       bootstrapThread.mockResolvedValue({ messages: [], status: 'idle' });
       chatStore.useChatStore.setState({ threadId: 'thread-1' });
@@ -197,16 +216,20 @@ describe('useChatStore', () => {
     it('sets errorMessage and attempts re-hydrate on streamRun failure', async () => {
       const { chatStore, langgraph } = loadChatModule();
 
-      jest.mocked(langgraph.streamRun).mockRejectedValue(new Error('Stream failed'));
+      jest
+        .mocked(langgraph.streamRun)
+        .mockRejectedValue(new Error('Stream failed'));
       jest.mocked(langgraph.bootstrapThread).mockResolvedValue({
-        messages: [{ id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 }],
+        messages: [
+          { id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 },
+        ],
         status: 'idle',
       });
       chatStore.useChatStore.setState({ threadId: 'thread-1' });
 
-      await expect(chatStore.useChatStore.getState().sendMessage('Hello')).rejects.toThrow(
-        'Stream failed',
-      );
+      await expect(
+        chatStore.useChatStore.getState().sendMessage('Hello'),
+      ).rejects.toThrow('Stream failed');
 
       const state = chatStore.useChatStore.getState();
 
@@ -222,12 +245,14 @@ describe('useChatStore', () => {
         await input.onAssistantTextSnapshot?.('partial');
         throw new Error('Stream failed');
       });
-      jest.mocked(langgraph.bootstrapThread).mockRejectedValue(new Error('Hydrate failed'));
+      jest
+        .mocked(langgraph.bootstrapThread)
+        .mockRejectedValue(new Error('Hydrate failed'));
       chatStore.useChatStore.setState({ threadId: 'thread-1' });
 
-      await expect(chatStore.useChatStore.getState().sendMessage('Hello')).rejects.toThrow(
-        'Stream failed',
-      );
+      await expect(
+        chatStore.useChatStore.getState().sendMessage('Hello'),
+      ).rejects.toThrow('Stream failed');
 
       const assistantMessages = chatStore.useChatStore
         .getState()
@@ -255,7 +280,10 @@ describe('useChatStore', () => {
     it('no-ops when isSending is already true', async () => {
       const { chatStore, langgraph } = loadChatModule();
 
-      chatStore.useChatStore.setState({ threadId: 'thread-1', isSending: true });
+      chatStore.useChatStore.setState({
+        threadId: 'thread-1',
+        isSending: true,
+      });
 
       await chatStore.useChatStore.getState().sendMessage('Hello');
 

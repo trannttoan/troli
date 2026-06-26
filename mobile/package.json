@@ -11,7 +11,7 @@
     "test": "jest",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'TODO: add linter'"
+    "lint": "eslint ."
   },
   "jest": {
     "preset": "jest-expo"

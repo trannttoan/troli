@@ -34,10 +34,10 @@ Make it fast and natural to manage your day through conversation. One app, one t
 
 Troli is initially built for personal use by the developer. Early testing will use Google OAuth in test mode (up to 100 test users, no verification required). The eventual goal is a public App Store release.
 
-| Phase | Details |
-|---|---|
-| Personal / Testing | Google OAuth test mode. Up to 100 registered test users. Unverified app warning shown at login. Distributed via Expo EAS Ad Hoc or TestFlight. |
-| App Store Release | Requires: (1) Google OAuth sensitive scope verification for Calendar and Tasks, (2) Google OAuth restricted scope verification + CASA security assessment for Gmail, (3) Apple App Store review. Plan 6–8 weeks for the Google verification pipeline. |
+| Phase              | Details                                                                                                                                                                                                                                               |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Personal / Testing | Google OAuth test mode. Up to 100 registered test users. Unverified app warning shown at login. Distributed via Expo EAS Ad Hoc or TestFlight.                                                                                                        |
+| App Store Release  | Requires: (1) Google OAuth sensitive scope verification for Calendar and Tasks, (2) Google OAuth restricted scope verification + CASA security assessment for Gmail, (3) Apple App Store review. Plan 6–8 weeks for the Google verification pipeline. |
 
 ---
 
@@ -45,12 +45,12 @@ Troli is initially built for personal use by the developer. Early testing will u
 
 Troli requests the narrowest scopes possible while supporting all v1.0 operations.
 
-| Service | Scope | Classification | Permits |
-|---|---|---|---|
-| Calendar | `calendar.events.owned` | Sensitive | CRUD on events on owned calendars |
-| Tasks | `tasks` | Sensitive | Full read/write on task lists and tasks |
-| Gmail | `gmail.readonly` | Restricted | Read-only access to messages, threads, labels |
-| Profile | `userinfo.email` | Non-sensitive | User email for display |
+| Service  | Scope                   | Classification | Permits                                       |
+| -------- | ----------------------- | -------------- | --------------------------------------------- |
+| Calendar | `calendar.events.owned` | Sensitive      | CRUD on events on owned calendars             |
+| Tasks    | `tasks`                 | Sensitive      | Full read/write on task lists and tasks       |
+| Gmail    | `gmail.readonly`        | Restricted     | Read-only access to messages, threads, labels |
+| Profile  | `userinfo.email`        | Non-sensitive  | User email for display                        |
 
 **Gmail is the compliance bottleneck.** The `gmail.readonly` scope is classified as "restricted" by Google. For personal/test use, this is fine. For a public App Store release, this scope requires a CASA Tier 2 security assessment (third-party audit). Budget 4–8 weeks and potentially several thousand dollars for this process.
 
@@ -60,13 +60,13 @@ Troli requests the narrowest scopes possible while supporting all v1.0 operation
 
 ### 5.1 Google Calendar Operations
 
-| Operation | HITL Required | Notes |
-|---|---|---|
-| List events | No | Supports date range, search query |
-| Get event details | No | Single event by ID |
-| Create event | No | Agent creates directly based on user's request |
-| Update event | Yes (approve/reject) | Agent shows what will change, user approves |
-| Delete event | Yes (approve/reject) | Agent confirms event name, user approves |
+| Operation         | HITL Required        | Notes                                          |
+| ----------------- | -------------------- | ---------------------------------------------- |
+| List events       | No                   | Supports date range, search query              |
+| Get event details | No                   | Single event by ID                             |
+| Create event      | No                   | Agent creates directly based on user's request |
+| Update event      | Yes (approve/reject) | Agent shows what will change, user approves    |
+| Delete event      | Yes (approve/reject) | Agent confirms event name, user approves       |
 
 **Recurring events:** When the user asks to change or delete a recurring event, the agent asks whether to modify a single occurrence or all future occurrences before proposing the update.
 
@@ -74,14 +74,14 @@ Troli requests the narrowest scopes possible while supporting all v1.0 operation
 
 ### 5.2 Google Tasks Operations
 
-| Operation | HITL Required | Notes |
-|---|---|---|
-| List task lists | No | Enumerate available lists |
-| List tasks | No | Tasks within a specific list |
-| Get task | No | Single task by ID |
-| Create task | No | Agent creates directly based on user's request |
-| Update task | Yes (approve/reject) | Includes marking as complete |
-| Delete task | Yes (approve/reject) | Agent confirms task name, user approves |
+| Operation       | HITL Required        | Notes                                          |
+| --------------- | -------------------- | ---------------------------------------------- |
+| List task lists | No                   | Enumerate available lists                      |
+| List tasks      | No                   | Tasks within a specific list                   |
+| Get task        | No                   | Single task by ID                              |
+| Create task     | No                   | Agent creates directly based on user's request |
+| Update task     | Yes (approve/reject) | Includes marking as complete                   |
+| Delete task     | Yes (approve/reject) | Agent confirms task name, user approves        |
 
 **Task list disambiguation:** When the user creates a task without specifying a list, the agent asks which list to use.
 
@@ -89,13 +89,13 @@ Troli requests the narrowest scopes possible while supporting all v1.0 operation
 
 Gmail is read-only in v1.0. Compose and send are deferred to post-v1.0.
 
-| Operation | HITL Required | Notes |
-|---|---|---|
-| List / search messages | No | Search with Gmail query syntax (from:, subject:, etc.) |
-| Get message | No | Full message body, headers, attachments metadata |
-| List / search threads | No | Grouped conversation view |
-| Get thread | No | All messages in a conversation |
-| List labels | No | Inbox, Sent, custom labels, etc. |
+| Operation              | HITL Required | Notes                                                  |
+| ---------------------- | ------------- | ------------------------------------------------------ |
+| List / search messages | No            | Search with Gmail query syntax (from:, subject:, etc.) |
+| Get message            | No            | Full message body, headers, attachments metadata       |
+| List / search threads  | No            | Grouped conversation view                              |
+| Get thread             | No            | All messages in a conversation                         |
+| List labels            | No            | Inbox, Sent, custom labels, etc.                       |
 
 ---
 
@@ -178,13 +178,13 @@ Signing out clears authentication tokens. Conversation history is retained so it
 
 ## 10. Error States
 
-| Scenario | User Experience |
-|---|---|
-| Google OAuth sign-in fails or is cancelled | Remains on sign-in screen with explanation and retry option |
-| Google account access is revoked | Full-screen prompt explaining that access was lost, with a button to re-authenticate |
-| Network unavailable | Error message in chat; user can retry when connectivity is restored |
-| Agent fails to execute a tool | Agent explains the error in the chat and suggests what the user can try |
-| Google API rate limit or error | Agent reports the issue conversationally and suggests trying again shortly |
+| Scenario                                   | User Experience                                                                      |
+| ------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Google OAuth sign-in fails or is cancelled | Remains on sign-in screen with explanation and retry option                          |
+| Google account access is revoked           | Full-screen prompt explaining that access was lost, with a button to re-authenticate |
+| Network unavailable                        | Error message in chat; user can retry when connectivity is restored                  |
+| Agent fails to execute a tool              | Agent explains the error in the chat and suggests what the user can try              |
+| Google API rate limit or error             | Agent reports the issue conversationally and suggests trying again shortly           |
 
 ---
 
@@ -206,44 +206,44 @@ Signing out clears authentication tokens. Conversation history is retained so it
 
 ## 12. Post-v1.0 Roadmap
 
-| Feature | Notes |
-|---|---|
-| Agent memory / user profile | Persistent profile of user preferences and habits across conversations. See deferred Section 8. |
-| Attendee name resolution | Resolve names like "Alex" to email addresses, likely via Google Contacts API. |
-| Gmail compose / send | Requires `gmail.compose` or `gmail.send` scope (both restricted). Same CASA audit requirement. |
-| HITL edit option | Let users modify proposed parameters via form fields before approving updates. |
-| Rich action cards in chat | Show calendar event previews, task cards, email snippets as interactive UI elements. |
-| Multi-calendar support | Broader scope to access shared calendars. Requires re-consent. |
-| Multiple Google accounts | Account switcher in the UI. |
-| Voice input | Speech-to-text on the client, transcribed text sent to the agent. |
-| Proactive notifications | Push notifications for upcoming events, overdue tasks, or important emails. |
-| Cost-optimized LLM routing | Cheaper model for simple queries, capable model for complex reasoning. |
-| Self-hosted LLM | Llama/Mistral via Ollama to eliminate per-token API costs. |
-| AWS migration | Move from LangGraph Cloud to self-managed AWS infrastructure for cost control and flexibility at scale. |
+| Feature                     | Notes                                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Agent memory / user profile | Persistent profile of user preferences and habits across conversations. See deferred Section 8.         |
+| Attendee name resolution    | Resolve names like "Alex" to email addresses, likely via Google Contacts API.                           |
+| Gmail compose / send        | Requires `gmail.compose` or `gmail.send` scope (both restricted). Same CASA audit requirement.          |
+| HITL edit option            | Let users modify proposed parameters via form fields before approving updates.                          |
+| Rich action cards in chat   | Show calendar event previews, task cards, email snippets as interactive UI elements.                    |
+| Multi-calendar support      | Broader scope to access shared calendars. Requires re-consent.                                          |
+| Multiple Google accounts    | Account switcher in the UI.                                                                             |
+| Voice input                 | Speech-to-text on the client, transcribed text sent to the agent.                                       |
+| Proactive notifications     | Push notifications for upcoming events, overdue tasks, or important emails.                             |
+| Cost-optimized LLM routing  | Cheaper model for simple queries, capable model for complex reasoning.                                  |
+| Self-hosted LLM             | Llama/Mistral via Ollama to eliminate per-token API costs.                                              |
+| AWS migration               | Move from LangGraph Cloud to self-managed AWS infrastructure for cost control and flexibility at scale. |
 
 ---
 
 ## 13. Known Limitations and Risks
 
-| Risk / Limitation | Notes |
-|---|---|
-| Gmail restricted scope audit | `gmail.readonly` requires a CASA security assessment for public release. Without it, the app is limited to 100 test users. This is the single largest compliance burden. |
-| LLM cost per conversation | Each agent turn involves one or more LLM calls. A heavy user could cost $5–10/month in API fees. Monitor via LangSmith and optimize over time. |
-| LLM hallucination risk | The agent might misinterpret natural language. Reads could return misleading summaries. Updates and deletes are protected by the HITL policy. Creates are not — the system prompt must instruct the agent to confirm ambiguous details before creating. |
-| Token refresh on mobile | If the user doesn't open the app for months, the Google refresh token may be revoked. The app must handle re-authentication gracefully. |
-| Google OAuth unverified warning | During test mode, users see a warning screen. Expected and documented. |
+| Risk / Limitation               | Notes                                                                                                                                                                                                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gmail restricted scope audit    | `gmail.readonly` requires a CASA security assessment for public release. Without it, the app is limited to 100 test users. This is the single largest compliance burden.                                                                                |
+| LLM cost per conversation       | Each agent turn involves one or more LLM calls. A heavy user could cost $5–10/month in API fees. Monitor via LangSmith and optimize over time.                                                                                                          |
+| LLM hallucination risk          | The agent might misinterpret natural language. Reads could return misleading summaries. Updates and deletes are protected by the HITL policy. Creates are not — the system prompt must instruct the agent to confirm ambiguous details before creating. |
+| Token refresh on mobile         | If the user doesn't open the app for months, the Google refresh token may be revoked. The app must handle re-authentication gracefully.                                                                                                                 |
+| Google OAuth unverified warning | During test mode, users see a warning screen. Expected and documented.                                                                                                                                                                                  |
 
 ---
 
 ## 14. Resolved Questions
 
-| # | Question | Resolution |
-|---|---|---|
-| 1 | AWS or LangGraph Cloud? | Start with LangGraph Cloud for v1.0. Migrate to AWS when scaling up. |
-| 2 | Single thread or multiple threads? | Single continuous thread per user. Keep past 7 days of messages in the LLM's context window. |
-| 3 | App name? | Troli |
-| 4 | HITL edit option for updates? | Deferred to post-v1.0. Form fields is the planned approach. |
-| 5 | What happens when old messages expire? | In v1.0, old messages simply fall out of the LLM's context window. Agent memory (persistent profile) is deferred to post-v1.0. |
+| #   | Question                               | Resolution                                                                                                                     |
+| --- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | AWS or LangGraph Cloud?                | Start with LangGraph Cloud for v1.0. Migrate to AWS when scaling up.                                                           |
+| 2   | Single thread or multiple threads?     | Single continuous thread per user. Keep past 7 days of messages in the LLM's context window.                                   |
+| 3   | App name?                              | Troli                                                                                                                          |
+| 4   | HITL edit option for updates?          | Deferred to post-v1.0. Form fields is the planned approach.                                                                    |
+| 5   | What happens when old messages expire? | In v1.0, old messages simply fall out of the LLM's context window. Agent memory (persistent profile) is deferred to post-v1.0. |
 
 ## 15. Open Questions
 
@@ -251,6 +251,6 @@ None at this time. All questions have been resolved.
 
 ## 16. Resolved Questions (continued)
 
-| # | Question | Resolution |
-|---|---|---|
-| 6 | Which LLM to start with? | Gemini 2.5 Flash-Lite for v1.0. Best cost-to-capability ratio for a tool-calling conversational agent. Architecture is provider-agnostic — can swap to GPT-4o or Claude Sonnet with a one-line config change. |
+| #   | Question                 | Resolution                                                                                                                                                                                                    |
+| --- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6   | Which LLM to start with? | Gemini 2.5 Flash-Lite for v1.0. Best cost-to-capability ratio for a tool-calling conversational agent. Architecture is provider-agnostic — can swap to GPT-4o or Claude Sonnet with a one-line config change. |

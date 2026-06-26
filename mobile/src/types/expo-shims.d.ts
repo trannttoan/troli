@@ -1,28 +1,28 @@
-declare module "expo" {
-  import type { ComponentType } from "react";
+declare module 'expo' {
+  import type { ComponentType } from 'react';
 
   export function registerRootComponent(
     component: ComponentType<unknown>,
   ): void;
 }
 
-declare module "expo-status-bar" {
-  import type { ReactElement } from "react";
+declare module 'expo-status-bar' {
+  import type { ReactElement } from 'react';
 
-  export type StatusBarStyle = "auto" | "dark" | "inverted" | "light";
+  export type StatusBarStyle = 'auto' | 'dark' | 'inverted' | 'light';
 
   export function StatusBar(props: {
     style?: StatusBarStyle;
   }): ReactElement | null;
 }
 
-declare module "expo-auth-session" {
+declare module 'expo-auth-session' {
   export type AuthSessionResult =
     | {
-        type: "cancel" | "dismiss" | "locked" | "opened";
+        type: 'cancel' | 'dismiss' | 'locked' | 'opened';
       }
     | {
-        type: "error";
+        type: 'error';
         error?: {
           description?: string;
         };
@@ -32,7 +32,7 @@ declare module "expo-auth-session" {
         };
       }
     | {
-        type: "success";
+        type: 'success';
         authentication?: {
           accessToken?: string;
           expiresIn?: number;
@@ -43,8 +43,8 @@ declare module "expo-auth-session" {
       };
 }
 
-declare module "expo-auth-session/providers/google" {
-  import type { AuthSessionResult } from "expo-auth-session";
+declare module 'expo-auth-session/providers/google' {
+  import type { AuthSessionResult } from 'expo-auth-session';
 
   export type GoogleAuthRequestConfig = {
     extraParams?: Record<string, string>;

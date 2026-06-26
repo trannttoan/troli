@@ -37,7 +37,8 @@ function HeaderSignOut() {
       style={({ pressed }) => [
         styles.headerSignOut,
         pressed ? styles.buttonPressed : null,
-      ]}>
+      ]}
+    >
       <Text style={styles.headerSignOutText}>Sign out</Text>
     </Pressable>
   );
@@ -52,7 +53,8 @@ export function RootNavigator() {
         animation: 'fade',
         contentStyle: styles.navigatorContent,
         headerShadowVisible: false,
-      }}>
+      }}
+    >
       {status === 'signed_in' ? (
         <Stack.Screen
           component={ChatScreen}

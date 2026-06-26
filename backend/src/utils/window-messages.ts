@@ -1,6 +1,6 @@
-import { BaseMessage } from "@langchain/core/messages";
+import { BaseMessage } from '@langchain/core/messages';
 
-import { getMessageTimestamp } from "./timestamp.js";
+import { getMessageTimestamp } from './timestamp.js';
 
 export const MESSAGE_WINDOW_DAYS = 7;
 export const MAX_WINDOW_MESSAGES = 200;

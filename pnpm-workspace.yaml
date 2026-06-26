@@ -1,6 +1,6 @@
 packages:
-  - "mobile"
-  - "backend"
+  - 'mobile'
+  - 'backend'
 allowBuilds:
   '@langgraphjs/toolkit': true
   esbuild: true

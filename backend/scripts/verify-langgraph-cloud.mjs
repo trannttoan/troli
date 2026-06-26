@@ -1,56 +1,60 @@
-import process from "node:process";
-import { v5 as uuidv5 } from "uuid";
+import process from 'node:process';
+import { v5 as uuidv5 } from 'uuid';
 
-const TROLI_NAMESPACE = "e587b8a0-3e1a-4c5d-9f2b-1a8c4d6e7f90";
-const DEFAULT_ASSISTANT_ID = "agent";
-const DEFAULT_MESSAGE = "Say hello in one short sentence.";
+const TROLI_NAMESPACE = 'e587b8a0-3e1a-4c5d-9f2b-1a8c4d6e7f90';
+const DEFAULT_ASSISTANT_ID = 'agent';
+const DEFAULT_MESSAGE = 'Say hello in one short sentence.';
 const DEFAULT_TIMEZONE =
-  Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Detroit";
+  Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Detroit';
 
 async function main() {
-  const apiUrl = getRequiredEnv("LANGGRAPH_API_URL").replace(/\/+$/, "");
-  const apiKey = getRequiredEnv("LANGGRAPH_API_KEY");
-  const accessToken = getRequiredEnv("GOOGLE_ACCESS_TOKEN");
-  const email = getRequiredEnv("GOOGLE_ACCOUNT_EMAIL").trim().toLowerCase();
+  const apiUrl = getRequiredEnv('LANGGRAPH_API_URL').replace(/\/+$/, '');
+  const apiKey = getRequiredEnv('LANGGRAPH_API_KEY');
+  const accessToken = getRequiredEnv('GOOGLE_ACCESS_TOKEN');
+  const email = getRequiredEnv('GOOGLE_ACCOUNT_EMAIL').trim().toLowerCase();
   const assistantId =
     process.env.LANGGRAPH_ASSISTANT_ID?.trim() || DEFAULT_ASSISTANT_ID;
   const message = process.env.LANGGRAPH_TEST_MESSAGE?.trim() || DEFAULT_MESSAGE;
   const timezone = process.env.LANGGRAPH_TIMEZONE?.trim() || DEFAULT_TIMEZONE;
-  const threadId = process.env.LANGGRAPH_THREAD_ID?.trim() || uuidv5(email, TROLI_NAMESPACE);
+  const threadId =
+    process.env.LANGGRAPH_THREAD_ID?.trim() || uuidv5(email, TROLI_NAMESPACE);
 
   await createThread({ apiKey, apiUrl, threadId });
 
   const thread = await fetchJson(`${apiUrl}/threads/${threadId}`, {
     headers: buildHeaders(apiKey),
-    method: "GET",
+    method: 'GET',
   });
 
-  const streamResponse = await fetch(`${apiUrl}/threads/${threadId}/runs/stream`, {
-    body: JSON.stringify({
-      assistant_id: assistantId,
-      config: {
-        configurable: {
-          access_token: accessToken,
-          timezone,
-        },
-      },
-      input: {
-        messages: [
-          {
-            content: message,
-            role: "human",
+  const streamResponse = await fetch(
+    `${apiUrl}/threads/${threadId}/runs/stream`,
+    {
+      body: JSON.stringify({
+        assistant_id: assistantId,
+        config: {
+          configurable: {
+            access_token: accessToken,
+            timezone,
           },
-        ],
+        },
+        input: {
+          messages: [
+            {
+              content: message,
+              role: 'human',
+            },
+          ],
+        },
+        stream_mode: ['messages'],
+      }),
+      headers: {
+        ...buildHeaders(apiKey),
+        Accept: 'text/event-stream',
+        'Content-Type': 'application/json',
       },
-      stream_mode: ["messages"],
-    }),
-    headers: {
-      ...buildHeaders(apiKey),
-      Accept: "text/event-stream",
-      "Content-Type": "application/json",
+      method: 'POST',
     },
-    method: "POST",
-  });
+  );
 
   if (!streamResponse.ok) {
     throw new Error(await buildHttpError(streamResponse));
@@ -59,30 +63,30 @@ async function main() {
   const summary = await consumeSseStream(streamResponse);
 
   if (!summary.sawEvent) {
-    throw new Error("LangGraph returned no SSE events.");
+    throw new Error('LangGraph returned no SSE events.');
   }
 
   if (!summary.assistantText.trim()) {
-    throw new Error("LangGraph SSE stream completed without assistant output.");
+    throw new Error('LangGraph SSE stream completed without assistant output.');
   }
 
   console.log(`assistant_id=${assistantId}`);
   console.log(`thread_id=${threadId}`);
-  console.log(`thread_status=${thread?.status ?? "unknown"}`);
+  console.log(`thread_status=${thread?.status ?? 'unknown'}`);
   console.log(`assistant_text=${summary.assistantText.trim()}`);
 }
 
 async function createThread({ apiKey, apiUrl, threadId }) {
   const response = await fetch(`${apiUrl}/threads`, {
     body: JSON.stringify({
-      if_exists: "do_nothing",
+      if_exists: 'do_nothing',
       thread_id: threadId,
     }),
     headers: {
       ...buildHeaders(apiKey),
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
-    method: "POST",
+    method: 'POST',
   });
 
   if (!response.ok) {
@@ -92,7 +96,7 @@ async function createThread({ apiKey, apiUrl, threadId }) {
 
 function buildHeaders(apiKey) {
   return {
-    "x-api-key": apiKey,
+    'x-api-key': apiKey,
   };
 }
 
@@ -108,19 +112,19 @@ async function fetchJson(url, init) {
 
 async function consumeSseStream(response) {
   if (!response.body) {
-    throw new Error("LangGraph response did not include a readable stream.");
+    throw new Error('LangGraph response did not include a readable stream.');
   }
 
   const decoder = new TextDecoder();
-  let buffer = "";
+  let buffer = '';
   let sawEvent = false;
-  let assistantText = "";
+  let assistantText = '';
 
   for await (const chunk of response.body) {
-    buffer += decoder.decode(chunk, { stream: true }).replace(/\r\n/g, "\n");
+    buffer += decoder.decode(chunk, { stream: true }).replace(/\r\n/g, '\n');
 
     while (true) {
-      const delimiterIndex = buffer.indexOf("\n\n");
+      const delimiterIndex = buffer.indexOf('\n\n');
 
       if (delimiterIndex === -1) {
         break;
@@ -131,18 +135,21 @@ async function consumeSseStream(response) {
 
       const event = parseSseEvent(rawEvent);
 
-      if (!event?.data || event.data === "[DONE]") {
+      if (!event?.data || event.data === '[DONE]') {
         continue;
       }
 
       sawEvent = true;
-      assistantText = mergeAssistantText(assistantText, extractAssistantText(event.data));
+      assistantText = mergeAssistantText(
+        assistantText,
+        extractAssistantText(event.data),
+      );
     }
   }
 
   const trailingEvent = parseSseEvent(buffer.trim());
 
-  if (trailingEvent?.data && trailingEvent.data !== "[DONE]") {
+  if (trailingEvent?.data && trailingEvent.data !== '[DONE]') {
     sawEvent = true;
     assistantText = mergeAssistantText(
       assistantText,
@@ -159,22 +166,22 @@ function parseSseEvent(rawEvent) {
   }
 
   const lines = rawEvent.split(/\r?\n/);
-  let event = "message";
+  let event = 'message';
   const dataLines = [];
 
   for (const line of lines) {
-    if (line.startsWith("event:")) {
-      event = line.slice("event:".length).trim() || "message";
+    if (line.startsWith('event:')) {
+      event = line.slice('event:'.length).trim() || 'message';
       continue;
     }
 
-    if (line.startsWith("data:")) {
-      dataLines.push(line.slice("data:".length).trimStart());
+    if (line.startsWith('data:')) {
+      dataLines.push(line.slice('data:'.length).trimStart());
     }
   }
 
   return {
-    data: dataLines.join("\n"),
+    data: dataLines.join('\n'),
     event,
   };
 }
@@ -185,10 +192,10 @@ function extractAssistantText(data) {
   try {
     parsed = JSON.parse(data);
   } catch {
-    return "";
+    return '';
   }
 
-  return collectAssistantText(parsed).join("");
+  return collectAssistantText(parsed).join('');
 }
 
 function mergeAssistantText(previousText, nextText) {
@@ -204,12 +211,14 @@ function mergeAssistantText(previousText, nextText) {
 }
 
 function collectAssistantText(payload, assistantContext = false) {
-  if (typeof payload === "string") {
+  if (typeof payload === 'string') {
     return assistantContext ? [payload] : [];
   }
 
   if (Array.isArray(payload)) {
-    return payload.flatMap((item) => collectAssistantText(item, assistantContext));
+    return payload.flatMap((item) =>
+      collectAssistantText(item, assistantContext),
+    );
   }
 
   if (!isRecord(payload)) {
@@ -217,7 +226,7 @@ function collectAssistantText(payload, assistantContext = false) {
   }
 
   const role = getRole(payload);
-  const nextAssistantContext = assistantContext || role === "assistant";
+  const nextAssistantContext = assistantContext || role === 'assistant';
   const fragments = [];
 
   if (nextAssistantContext) {
@@ -226,9 +235,18 @@ function collectAssistantText(payload, assistantContext = false) {
     fragments.push(...flattenText(payload.delta));
   }
 
-  for (const key of ["chunk", "data", "kwargs", "message", "messages", "value"]) {
+  for (const key of [
+    'chunk',
+    'data',
+    'kwargs',
+    'message',
+    'messages',
+    'value',
+  ]) {
     if (key in payload) {
-      fragments.push(...collectAssistantText(payload[key], nextAssistantContext));
+      fragments.push(
+        ...collectAssistantText(payload[key], nextAssistantContext),
+      );
     }
   }
 
@@ -236,7 +254,7 @@ function collectAssistantText(payload, assistantContext = false) {
 }
 
 function flattenText(value) {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     return [value];
   }
 
@@ -257,11 +275,11 @@ function flattenText(value) {
 
 function getRole(payload) {
   const role = payload.role ?? payload.type;
-  return typeof role === "string" ? role : null;
+  return typeof role === 'string' ? role : null;
 }
 
 function isRecord(value) {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }
 
 async function buildHttpError(response) {

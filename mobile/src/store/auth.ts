@@ -57,7 +57,8 @@ const signedOutState = {
 };
 
 let refreshPromise: Promise<string> | null = null;
-let loadChatStoreModule: () => Promise<ChatStoreModule> = () => import('./chat');
+let loadChatStoreModule: () => Promise<ChatStoreModule> = () =>
+  import('./chat');
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   ...signedOutState,
@@ -221,13 +222,14 @@ async function clearStoredSession() {
 }
 
 async function loadStoredSession(): Promise<AuthSessionData | null> {
-  const [accessToken, refreshToken, expiryAt, email, scopes] = await Promise.all([
-    SecureStore.getItemAsync(STORAGE_KEYS.accessToken, STORAGE_OPTIONS),
-    SecureStore.getItemAsync(STORAGE_KEYS.refreshToken, STORAGE_OPTIONS),
-    SecureStore.getItemAsync(STORAGE_KEYS.expiryAt, STORAGE_OPTIONS),
-    SecureStore.getItemAsync(STORAGE_KEYS.email, STORAGE_OPTIONS),
-    SecureStore.getItemAsync(STORAGE_KEYS.scopes, STORAGE_OPTIONS),
-  ]);
+  const [accessToken, refreshToken, expiryAt, email, scopes] =
+    await Promise.all([
+      SecureStore.getItemAsync(STORAGE_KEYS.accessToken, STORAGE_OPTIONS),
+      SecureStore.getItemAsync(STORAGE_KEYS.refreshToken, STORAGE_OPTIONS),
+      SecureStore.getItemAsync(STORAGE_KEYS.expiryAt, STORAGE_OPTIONS),
+      SecureStore.getItemAsync(STORAGE_KEYS.email, STORAGE_OPTIONS),
+      SecureStore.getItemAsync(STORAGE_KEYS.scopes, STORAGE_OPTIONS),
+    ]);
 
   if (accessToken && refreshToken && expiryAt && email) {
     return {
@@ -260,9 +262,21 @@ async function persistSession(session: AuthSessionData) {
       session.refreshToken,
       STORAGE_OPTIONS,
     ),
-    SecureStore.setItemAsync(STORAGE_KEYS.expiryAt, session.expiryAt, STORAGE_OPTIONS),
-    SecureStore.setItemAsync(STORAGE_KEYS.email, session.email, STORAGE_OPTIONS),
-    SecureStore.setItemAsync(STORAGE_KEYS.scopes, JSON.stringify(scopes), STORAGE_OPTIONS),
+    SecureStore.setItemAsync(
+      STORAGE_KEYS.expiryAt,
+      session.expiryAt,
+      STORAGE_OPTIONS,
+    ),
+    SecureStore.setItemAsync(
+      STORAGE_KEYS.email,
+      session.email,
+      STORAGE_OPTIONS,
+    ),
+    SecureStore.setItemAsync(
+      STORAGE_KEYS.scopes,
+      JSON.stringify(scopes),
+      STORAGE_OPTIONS,
+    ),
   ]);
 }
 
@@ -284,7 +298,10 @@ function parseStoredScopes(value: string | null): string[] {
   try {
     const parsed = JSON.parse(value) as unknown;
 
-    if (!Array.isArray(parsed) || !parsed.every((scope) => typeof scope === 'string')) {
+    if (
+      !Array.isArray(parsed) ||
+      !parsed.every((scope) => typeof scope === 'string')
+    ) {
       return [];
     }
 

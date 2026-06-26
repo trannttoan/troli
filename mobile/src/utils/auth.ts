@@ -3,7 +3,8 @@ import type { AuthSessionResult } from 'expo-auth-session';
 const DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 3600;
 const REQUEST_TIMEOUT_MS = 5000;
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
-const GOOGLE_USERINFO_ENDPOINT = 'https://openidconnect.googleapis.com/v1/userinfo';
+const GOOGLE_USERINFO_ENDPOINT =
+  'https://openidconnect.googleapis.com/v1/userinfo';
 
 export const GOOGLE_SCOPES = [
   'openid',
@@ -82,10 +83,10 @@ export async function buildSessionFromAuthResponse(
   if (response.type !== 'success' || !response.authentication?.accessToken) {
     const errorDescription =
       response.type === 'error'
-        ? response.error?.description ??
+        ? (response.error?.description ??
           response.params.error_description ??
           response.params.error ??
-          'Google sign-in failed during token exchange.'
+          'Google sign-in failed during token exchange.')
         : 'Google sign-in failed during token exchange.';
 
     throw new GoogleAuthError('exchange_failed', errorDescription);
@@ -115,7 +116,9 @@ export async function buildSessionFromAuthResponse(
 export async function refreshGoogleAccessToken(input: {
   clientId: string;
   refreshToken: string;
-}): Promise<Pick<AuthSessionData, 'accessToken' | 'refreshToken' | 'expiryAt'>> {
+}): Promise<
+  Pick<AuthSessionData, 'accessToken' | 'refreshToken' | 'expiryAt'>
+> {
   const body = new URLSearchParams({
     client_id: input.clientId,
     grant_type: 'refresh_token',

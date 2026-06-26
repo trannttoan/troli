@@ -10,7 +10,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 import { ChatInput } from '../components/ChatInput';
 import { MessageBubble } from '../components/MessageBubble';
@@ -36,8 +39,7 @@ export function ChatScreen() {
   const isConfigured = isLangGraphConfigured();
   const missingConfig = useMemo(() => getMissingLangGraphConfig(), []);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const keyboardVerticalOffset =
-    Platform.OS === 'ios' ? insets.top + 56 : 0;
+  const keyboardVerticalOffset = Platform.OS === 'ios' ? insets.top + 56 : 0;
 
   useEffect(() => {
     const showEvent =
@@ -74,11 +76,10 @@ export function ChatScreen() {
           <Text style={styles.eyebrow}>Chat backend not configured</Text>
           <Text style={styles.title}>Troli</Text>
           <Text style={styles.body}>
-            Add the LangGraph Cloud URL and API key before testing the mobile chat flow.
+            Add the LangGraph Cloud URL and API key before testing the mobile
+            chat flow.
           </Text>
-          <Text style={styles.missingConfig}>
-            {missingConfig.join('\n')}
-          </Text>
+          <Text style={styles.missingConfig}>{missingConfig.join('\n')}</Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => {
@@ -87,7 +88,8 @@ export function ChatScreen() {
             style={({ pressed }) => [
               styles.secondaryButton,
               pressed ? styles.buttonPressed : null,
-            ]}>
+            ]}
+          >
             <Text style={styles.secondaryButtonText}>Sign out</Text>
           </Pressable>
         </View>
@@ -100,7 +102,8 @@ export function ChatScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={keyboardVerticalOffset}
-        style={styles.flex}>
+        style={styles.flex}
+      >
         {isBootstrapping && messages.length === 0 ? (
           <View style={styles.loadingState}>
             <ActivityIndicator color="#1f5c4a" size="large" />
@@ -118,7 +121,8 @@ export function ChatScreen() {
                 style={({ pressed }) => [
                   styles.errorBanner,
                   pressed ? styles.buttonPressed : null,
-                ]}>
+                ]}
+              >
                 <Text style={styles.errorTitle}>Connection issue</Text>
                 <Text style={styles.errorBody}>{errorMessage}</Text>
                 <Text style={styles.errorHint}>Tap to dismiss</Text>
@@ -130,11 +134,15 @@ export function ChatScreen() {
               contentContainerStyle={styles.listContent}
               data={messages}
               keyExtractor={(item) => item.id}
-              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              keyboardDismissMode={
+                Platform.OS === 'ios' ? 'interactive' : 'on-drag'
+              }
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyTitle}>Walking skeleton is live</Text>
+                  <Text style={styles.emptyTitle}>
+                    Walking skeleton is live
+                  </Text>
                   <Text style={styles.emptyBody}>
                     Send a message to create the first turn in your thread.
                   </Text>
@@ -157,7 +165,8 @@ export function ChatScreen() {
                   style={({ pressed }) => [
                     styles.keyboardDismissButton,
                     pressed ? styles.buttonPressed : null,
-                  ]}>
+                  ]}
+                >
                   <Text style={styles.keyboardDismissText}>Done</Text>
                 </Pressable>
               </View>
