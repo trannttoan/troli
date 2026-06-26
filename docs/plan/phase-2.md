@@ -173,6 +173,7 @@ Key files to read for planning: `backend/src/agent.ts`, `mobile/src/services/lan
 
 - **Recurring events:** `single` and `all` scopes only. `thisAndFollowing` deferred — requires split-series flow, purely additive to tool internals when added later.
 - **Create idempotency:** Accepted duplicate risk on ambiguous failures. Dedup deferred.
+- **Event list pagination:** `list_calendar_events` does not paginate — Google defaults to 250 results per page. Users with >250 events in the query window will get a silently truncated list. Add `nextPageToken` handling or an explicit `maxResults` cap if this becomes a problem.
 
 ## Subtasks
 
