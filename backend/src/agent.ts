@@ -82,6 +82,20 @@ async function preprocessNode(
 
 const toolNode = new ToolNode(calendarTools);
 
+async function toolsNode(
+  state: typeof AgentState.State,
+  config: LangGraphRunnableConfig,
+) {
+  const result = (await toolNode.invoke(
+    state,
+    config,
+  )) as typeof AgentState.State;
+
+  return {
+    messages: result.messages.map((m) => stampMessage(m)),
+  };
+}
+
 const workflow = new StateGraph(AgentState)
   .addNode('preprocess', preprocessNode)
   .addNode('agent', async (state, config) => {
@@ -96,7 +110,7 @@ const workflow = new StateGraph(AgentState)
 
     return { messages: [stampMessage(response)] };
   })
-  .addNode('tools', toolNode)
+  .addNode('tools', toolsNode)
   .addEdge('__start__', 'preprocess')
   .addEdge('preprocess', 'agent')
   .addConditionalEdges('agent', toolsCondition, ['tools', '__end__'])

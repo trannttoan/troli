@@ -335,6 +335,12 @@ describe('agent graph', () => {
       );
 
       expect(toolMessage?.content).toContain('Team Sync');
+
+      const resultToolMessage = result.messages.find(
+        (m: { _getType: () => string }) => m._getType() === 'tool',
+      );
+
+      expect(getMessageTimestamp(resultToolMessage!)).toBe(FIXED_TIMESTAMP);
       expect(result.messages[result.messages.length - 1]?.content).toBe(
         'You have one event tomorrow: Team Sync at 9:00 AM.',
       );
