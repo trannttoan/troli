@@ -101,7 +101,10 @@ export async function buildSessionFromAuthResponse(
   }
 
   const email = await fetchGoogleUserEmail(response.authentication.accessToken);
-  const grantedScopes = parseGrantedScopes(response.authentication.scope);
+  const scopeString = response.authentication.scope ?? response.params.scope;
+  const grantedScopes = scopeString
+    ? parseGrantedScopes(scopeString)
+    : [...GOOGLE_SCOPES];
   const missingScopes = GOOGLE_SCOPES.filter((s) => !grantedScopes.includes(s));
 
   if (missingScopes.length > 0) {

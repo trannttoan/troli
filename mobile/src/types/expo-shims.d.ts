@@ -38,6 +38,7 @@ declare module 'expo-auth-session' {
           expiresIn?: number;
           issuedAt?: number;
           refreshToken?: string;
+          scope?: string;
         };
         params: Record<string, string | undefined>;
       };

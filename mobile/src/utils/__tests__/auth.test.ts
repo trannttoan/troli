@@ -143,14 +143,33 @@ describe('buildSessionFromAuthResponse', () => {
     });
   });
 
-  it('throws insufficient_scope when scope field is missing', async () => {
+  it('assumes all requested scopes granted when scope field is absent (RFC 6749 §5.1)', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ email: 'user@example.com' }));
 
-    await expect(
-      buildSessionFromAuthResponse(successAuthResult({ scope: undefined })),
-    ).rejects.toMatchObject({
-      code: 'insufficient_scope',
-    });
+    const session = await buildSessionFromAuthResponse(
+      successAuthResult({ scope: undefined }),
+    );
+
+    expect(session.scopes).toEqual(GOOGLE_SCOPES);
+  });
+
+  it('falls back to params.scope when authentication.scope is absent', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ email: 'user@example.com' }));
+
+    const result = {
+      type: 'success',
+      authentication: {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        issuedAt: Math.floor(Date.now() / 1000),
+        expiresIn: 3600,
+      },
+      params: { scope: ALL_SCOPES_STRING },
+    } as unknown as AuthSessionResult;
+
+    const session = await buildSessionFromAuthResponse(result);
+
+    expect(session.scopes).toEqual(GOOGLE_SCOPES);
   });
 
   it('throws userinfo_failed when response has no email', async () => {
