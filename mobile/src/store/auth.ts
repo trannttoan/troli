@@ -3,6 +3,7 @@ import { create } from 'zustand';
 
 import {
   getGoogleIosClientId,
+  GOOGLE_SCOPES,
   isForceReauthError,
   isRefreshTimeoutError,
   refreshGoogleAccessToken,
@@ -16,11 +17,15 @@ const STORAGE_KEYS = {
   email: 'auth_user_email',
   expiryAt: 'auth_token_expiry',
   refreshToken: 'auth_refresh_token',
+  scopes: 'auth_granted_scopes',
 } as const;
 
 const STORAGE_OPTIONS = {
   keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
 } as const;
+
+const SCOPE_MISMATCH_MESSAGE =
+  'Troli now needs calendar access. Please sign in again.';
 
 type AuthStatus = 'loading' | 'signed_in' | 'signed_out';
 
@@ -52,7 +57,8 @@ const signedOutState = {
 };
 
 let refreshPromise: Promise<string> | null = null;
-let loadChatStoreModule: () => Promise<ChatStoreModule> = () => import('./chat');
+let loadChatStoreModule: () => Promise<ChatStoreModule> = () =>
+  import('./chat');
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   ...signedOutState,
@@ -114,6 +120,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           email: latestState.email,
           expiryAt: refreshedTokens.expiryAt,
           refreshToken: refreshedTokens.refreshToken,
+          scopes: GOOGLE_SCOPES,
         };
 
         await persistSession(nextSession);
@@ -153,6 +160,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (!storedSession) {
       set({ ...signedOutState, status: 'signed_out' });
+      return;
+    }
+
+    if (!hasRequiredScopes(storedSession.scopes)) {
+      await get().signOut(SCOPE_MISMATCH_MESSAGE);
       return;
     }
 
@@ -205,16 +217,19 @@ async function clearStoredSession() {
     SecureStore.deleteItemAsync(STORAGE_KEYS.refreshToken, STORAGE_OPTIONS),
     SecureStore.deleteItemAsync(STORAGE_KEYS.expiryAt, STORAGE_OPTIONS),
     SecureStore.deleteItemAsync(STORAGE_KEYS.email, STORAGE_OPTIONS),
+    SecureStore.deleteItemAsync(STORAGE_KEYS.scopes, STORAGE_OPTIONS),
   ]);
 }
 
 async function loadStoredSession(): Promise<AuthSessionData | null> {
-  const [accessToken, refreshToken, expiryAt, email] = await Promise.all([
-    SecureStore.getItemAsync(STORAGE_KEYS.accessToken, STORAGE_OPTIONS),
-    SecureStore.getItemAsync(STORAGE_KEYS.refreshToken, STORAGE_OPTIONS),
-    SecureStore.getItemAsync(STORAGE_KEYS.expiryAt, STORAGE_OPTIONS),
-    SecureStore.getItemAsync(STORAGE_KEYS.email, STORAGE_OPTIONS),
-  ]);
+  const [accessToken, refreshToken, expiryAt, email, scopes] =
+    await Promise.all([
+      SecureStore.getItemAsync(STORAGE_KEYS.accessToken, STORAGE_OPTIONS),
+      SecureStore.getItemAsync(STORAGE_KEYS.refreshToken, STORAGE_OPTIONS),
+      SecureStore.getItemAsync(STORAGE_KEYS.expiryAt, STORAGE_OPTIONS),
+      SecureStore.getItemAsync(STORAGE_KEYS.email, STORAGE_OPTIONS),
+      SecureStore.getItemAsync(STORAGE_KEYS.scopes, STORAGE_OPTIONS),
+    ]);
 
   if (accessToken && refreshToken && expiryAt && email) {
     return {
@@ -222,10 +237,11 @@ async function loadStoredSession(): Promise<AuthSessionData | null> {
       email,
       expiryAt,
       refreshToken,
+      scopes: parseStoredScopes(scopes),
     };
   }
 
-  if (accessToken || refreshToken || expiryAt || email) {
+  if (accessToken || refreshToken || expiryAt || email || scopes) {
     await clearStoredSession();
   }
 
@@ -233,6 +249,8 @@ async function loadStoredSession(): Promise<AuthSessionData | null> {
 }
 
 async function persistSession(session: AuthSessionData) {
+  const scopes = normalizeScopes(session.scopes);
+
   await Promise.all([
     SecureStore.setItemAsync(
       STORAGE_KEYS.accessToken,
@@ -244,9 +262,53 @@ async function persistSession(session: AuthSessionData) {
       session.refreshToken,
       STORAGE_OPTIONS,
     ),
-    SecureStore.setItemAsync(STORAGE_KEYS.expiryAt, session.expiryAt, STORAGE_OPTIONS),
-    SecureStore.setItemAsync(STORAGE_KEYS.email, session.email, STORAGE_OPTIONS),
+    SecureStore.setItemAsync(
+      STORAGE_KEYS.expiryAt,
+      session.expiryAt,
+      STORAGE_OPTIONS,
+    ),
+    SecureStore.setItemAsync(
+      STORAGE_KEYS.email,
+      session.email,
+      STORAGE_OPTIONS,
+    ),
+    SecureStore.setItemAsync(
+      STORAGE_KEYS.scopes,
+      JSON.stringify(scopes),
+      STORAGE_OPTIONS,
+    ),
   ]);
+}
+
+function hasRequiredScopes(grantedScopes: string[]) {
+  const grantedScopeSet = new Set(normalizeScopes(grantedScopes));
+
+  return GOOGLE_SCOPES.every((scope) => grantedScopeSet.has(scope));
+}
+
+function normalizeScopes(scopes: string[]) {
+  return Array.from(new Set(scopes)).sort();
+}
+
+function parseStoredScopes(value: string | null): string[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+
+    if (
+      !Array.isArray(parsed) ||
+      !parsed.every((scope) => typeof scope === 'string')
+    ) {
+      return [];
+    }
+
+    return normalizeScopes(parsed);
+  } catch {
+    return [];
+  }
 }
 
 async function refreshWithRetry(input: {

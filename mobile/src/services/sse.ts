@@ -72,7 +72,8 @@ export async function consumeSseStream({
       }
 
       const separatorIndex = line.indexOf(':');
-      const field = separatorIndex === -1 ? line : line.slice(0, separatorIndex);
+      const field =
+        separatorIndex === -1 ? line : line.slice(0, separatorIndex);
       let fieldValue =
         separatorIndex === -1 ? '' : line.slice(separatorIndex + 1);
 
@@ -109,7 +110,9 @@ export async function consumeSseStream({
 
     const separatorIndex = trailingLine.indexOf(':');
     const field =
-      separatorIndex === -1 ? trailingLine : trailingLine.slice(0, separatorIndex);
+      separatorIndex === -1
+        ? trailingLine
+        : trailingLine.slice(0, separatorIndex);
     let fieldValue =
       separatorIndex === -1 ? '' : trailingLine.slice(separatorIndex + 1);
 

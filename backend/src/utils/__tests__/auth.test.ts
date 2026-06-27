@@ -1,18 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   TroliAuthError,
   isTroliAuthError,
   validateGoogleToken,
   verifyThreadAuthorization,
-} from "../auth.js";
-import { generateThreadId } from "../thread.js";
+} from '../auth.js';
+import { generateThreadId } from '../thread.js';
 
-describe("validateGoogleToken", () => {
+describe('validateGoogleToken', () => {
   const fetchMock = vi.fn();
 
   beforeEach(() => {
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal('fetch', fetchMock);
   });
 
   afterEach(() => {
@@ -20,11 +20,11 @@ describe("validateGoogleToken", () => {
     vi.unstubAllGlobals();
   });
 
-  it("normalizes the validated Google email address", async () => {
+  it('normalizes the validated Google email address', async () => {
     fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ email: "Person@Example.com" }), {
+      new Response(JSON.stringify({ email: 'Person@Example.com' }), {
         headers: {
-          "content-type": "application/json",
+          'content-type': 'application/json',
         },
         status: 200,
       }),
@@ -32,25 +32,25 @@ describe("validateGoogleToken", () => {
 
     const result = await validateGoogleToken({
       configurable: {
-        access_token: "google-access-token",
+        access_token: 'google-access-token',
       },
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://oauth2.googleapis.com/tokeninfo?access_token=google-access-token",
+      'https://oauth2.googleapis.com/tokeninfo?access_token=google-access-token',
       expect.objectContaining({
-        method: "GET",
+        method: 'GET',
         signal: expect.any(AbortSignal),
       }),
     );
-    expect(result).toEqual({ email: "person@example.com" });
+    expect(result).toEqual({ email: 'person@example.com' });
   });
 
-  it("returns an auth error when Google rejects the token", async () => {
+  it('returns an auth error when Google rejects the token', async () => {
     fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ error: "invalid_token" }), {
+      new Response(JSON.stringify({ error: 'invalid_token' }), {
         headers: {
-          "content-type": "application/json",
+          'content-type': 'application/json',
         },
         status: 401,
       }),
@@ -59,21 +59,21 @@ describe("validateGoogleToken", () => {
     await expect(
       validateGoogleToken({
         configurable: {
-          access_token: "expired-token",
+          access_token: 'expired-token',
         },
       }),
     ).rejects.toMatchObject<TroliAuthError>({
-      code: "AUTH_INVALID_TOKEN",
+      code: 'AUTH_INVALID_TOKEN',
       retryable: false,
       status: 401,
     });
   });
 
-  it("returns an auth error when the tokeninfo payload has no valid email", async () => {
+  it('returns an auth error when the tokeninfo payload has no valid email', async () => {
     fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ sub: "123" }), {
+      new Response(JSON.stringify({ sub: '123' }), {
         headers: {
-          "content-type": "application/json",
+          'content-type': 'application/json',
         },
         status: 200,
       }),
@@ -82,82 +82,82 @@ describe("validateGoogleToken", () => {
     await expect(
       validateGoogleToken({
         configurable: {
-          access_token: "bad-payload",
+          access_token: 'bad-payload',
         },
       }),
     ).rejects.toMatchObject<TroliAuthError>({
-      code: "AUTH_INVALID_TOKEN",
+      code: 'AUTH_INVALID_TOKEN',
       retryable: false,
       status: 401,
     });
   });
 
-  it("returns a retryable error when Google returns a 5xx status", async () => {
+  it('returns a retryable error when Google returns a 5xx status', async () => {
     fetchMock.mockResolvedValue(
-      new Response("Internal Server Error", { status: 502 }),
+      new Response('Internal Server Error', { status: 502 }),
     );
 
     await expect(
       validateGoogleToken({
         configurable: {
-          access_token: "valid-token",
+          access_token: 'valid-token',
         },
       }),
     ).rejects.toMatchObject<TroliAuthError>({
-      code: "AUTH_TOKENINFO_UNAVAILABLE",
+      code: 'AUTH_TOKENINFO_UNAVAILABLE',
       retryable: true,
       status: 503,
     });
   });
 
-  it("returns a retryable error when the request times out", async () => {
+  it('returns a retryable error when the request times out', async () => {
     fetchMock.mockRejectedValue(
-      new DOMException("The operation was aborted.", "AbortError"),
+      new DOMException('The operation was aborted.', 'AbortError'),
     );
 
     await expect(
       validateGoogleToken({
         configurable: {
-          access_token: "valid-token",
+          access_token: 'valid-token',
         },
       }),
     ).rejects.toMatchObject<TroliAuthError>({
-      code: "AUTH_TOKENINFO_UNAVAILABLE",
+      code: 'AUTH_TOKENINFO_UNAVAILABLE',
       retryable: true,
       status: 503,
     });
   });
 
-  it("returns a retryable error on a transient network failure", async () => {
-    fetchMock.mockRejectedValue(new TypeError("fetch failed"));
+  it('returns a retryable error on a transient network failure', async () => {
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
 
     await expect(
       validateGoogleToken({
         configurable: {
-          access_token: "valid-token",
+          access_token: 'valid-token',
         },
       }),
     ).rejects.toMatchObject<TroliAuthError>({
-      code: "AUTH_TOKENINFO_UNAVAILABLE",
+      code: 'AUTH_TOKENINFO_UNAVAILABLE',
       retryable: true,
       status: 503,
     });
   });
 
-  it("throws when the access token is missing from the config", async () => {
+  it('throws when the access token is missing from the config', async () => {
     await expect(
       validateGoogleToken({ configurable: {} }),
     ).rejects.toMatchObject<TroliAuthError>({
-      code: "AUTH_MISSING_ACCESS_TOKEN",
+      code: 'AUTH_MISSING_ACCESS_TOKEN',
       retryable: false,
       status: 401,
     });
   });
 });
 
-describe("isTroliAuthError", () => {
-  it("returns true for TroliAuthError instances", () => {
-    const error = new TroliAuthError("AUTH_INVALID_TOKEN", "test", {
+describe('isTroliAuthError', () => {
+  it('returns true for TroliAuthError instances', () => {
+    const error = new TroliAuthError('AUTH_INVALID_TOKEN', 'test', {
       retryable: false,
       status: 401,
     });
@@ -165,14 +165,14 @@ describe("isTroliAuthError", () => {
     expect(isTroliAuthError(error)).toBe(true);
   });
 
-  it("returns false for plain Error instances", () => {
-    expect(isTroliAuthError(new Error("test"))).toBe(false);
+  it('returns false for plain Error instances', () => {
+    expect(isTroliAuthError(new Error('test'))).toBe(false);
   });
 });
 
-describe("verifyThreadAuthorization", () => {
-  it("accepts the expected deterministic thread id", () => {
-    const email = "person@example.com";
+describe('verifyThreadAuthorization', () => {
+  it('accepts the expected deterministic thread id', () => {
+    const email = 'person@example.com';
 
     expect(() =>
       verifyThreadAuthorization(
@@ -186,34 +186,31 @@ describe("verifyThreadAuthorization", () => {
     ).not.toThrow();
   });
 
-  it("throws when the thread id is missing from the config", () => {
+  it('throws when the thread id is missing from the config', () => {
     expect(() =>
-      verifyThreadAuthorization(
-        { configurable: {} },
-        "person@example.com",
-      ),
+      verifyThreadAuthorization({ configurable: {} }, 'person@example.com'),
     ).toThrowError(
       expect.objectContaining({
-        code: "AUTH_THREAD_MISMATCH",
+        code: 'AUTH_THREAD_MISMATCH',
         retryable: false,
         status: 403,
       }),
     );
   });
 
-  it("rejects a mismatched thread id", () => {
+  it('rejects a mismatched thread id', () => {
     expect(() =>
       verifyThreadAuthorization(
         {
           configurable: {
-            thread_id: generateThreadId("other@example.com"),
+            thread_id: generateThreadId('other@example.com'),
           },
         },
-        "person@example.com",
+        'person@example.com',
       ),
     ).toThrowError(
       expect.objectContaining({
-        code: "AUTH_THREAD_MISMATCH",
+        code: 'AUTH_THREAD_MISMATCH',
         retryable: false,
         status: 403,
       }),

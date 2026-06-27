@@ -3,12 +3,14 @@ import type { AuthSessionResult } from 'expo-auth-session';
 const DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 3600;
 const REQUEST_TIMEOUT_MS = 5000;
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
-const GOOGLE_USERINFO_ENDPOINT = 'https://openidconnect.googleapis.com/v1/userinfo';
+const GOOGLE_USERINFO_ENDPOINT =
+  'https://openidconnect.googleapis.com/v1/userinfo';
 
 export const GOOGLE_SCOPES = [
   'openid',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/calendar.events.owned',
 ];
 
 export type AuthSessionData = {
@@ -16,6 +18,7 @@ export type AuthSessionData = {
   refreshToken: string;
   expiryAt: string;
   email: string;
+  scopes: string[];
 };
 
 type GoogleUserInfo = {
@@ -31,6 +34,7 @@ type RefreshResponse = {
 export type GoogleAuthErrorCode =
   | 'cancelled'
   | 'exchange_failed'
+  | 'insufficient_scope'
   | 'missing_refresh_token'
   | 'request_timeout'
   | 'refresh_force_reauth'
@@ -80,10 +84,10 @@ export async function buildSessionFromAuthResponse(
   if (response.type !== 'success' || !response.authentication?.accessToken) {
     const errorDescription =
       response.type === 'error'
-        ? response.error?.description ??
+        ? (response.error?.description ??
           response.params.error_description ??
           response.params.error ??
-          'Google sign-in failed during token exchange.'
+          'Google sign-in failed during token exchange.')
         : 'Google sign-in failed during token exchange.';
 
     throw new GoogleAuthError('exchange_failed', errorDescription);
@@ -97,6 +101,19 @@ export async function buildSessionFromAuthResponse(
   }
 
   const email = await fetchGoogleUserEmail(response.authentication.accessToken);
+  const scopeString = response.authentication.scope ?? response.params.scope;
+  const grantedScopes = scopeString
+    ? parseGrantedScopes(scopeString)
+    : [...GOOGLE_SCOPES];
+  const missingScopes = GOOGLE_SCOPES.filter((s) => !grantedScopes.includes(s));
+
+  if (missingScopes.length > 0) {
+    throw new GoogleAuthError(
+      'insufficient_scope',
+      'Troli needs calendar access to work. Please sign in again and grant all permissions.',
+      true,
+    );
+  }
 
   return {
     accessToken: response.authentication.accessToken,
@@ -106,13 +123,24 @@ export async function buildSessionFromAuthResponse(
       response.authentication.expiresIn,
     ),
     email,
+    scopes: grantedScopes,
   };
+}
+
+export function parseGrantedScopes(scope: string | undefined): string[] {
+  if (!scope || scope.trim() === '') {
+    return [];
+  }
+
+  return scope.trim().split(/\s+/);
 }
 
 export async function refreshGoogleAccessToken(input: {
   clientId: string;
   refreshToken: string;
-}): Promise<Pick<AuthSessionData, 'accessToken' | 'refreshToken' | 'expiryAt'>> {
+}): Promise<
+  Pick<AuthSessionData, 'accessToken' | 'refreshToken' | 'expiryAt'>
+> {
   const body = new URLSearchParams({
     client_id: input.clientId,
     grant_type: 'refresh_token',

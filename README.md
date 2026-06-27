@@ -72,12 +72,12 @@ This is implemented using LangGraph's `interrupt()` mechanism. The graph checkpo
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Mobile | Expo 56, React Native, Zustand, expo-auth-session, expo-secure-store |
-| Backend | Node.js, LangGraph.js, Gemini 2.5 Flash-Lite, Zod |
-| Infrastructure | LangGraph Cloud, LangSmith |
-| Tooling | TypeScript, pnpm workspaces |
+| Layer          | Technology                                                           |
+| -------------- | -------------------------------------------------------------------- |
+| Mobile         | Expo 56, React Native, Zustand, expo-auth-session, expo-secure-store |
+| Backend        | Node.js, LangGraph.js, Gemini 2.5 Flash-Lite, Zod                    |
+| Infrastructure | LangGraph Cloud, LangSmith                                           |
+| Tooling        | TypeScript, pnpm workspaces                                          |
 
 ## Project Structure
 

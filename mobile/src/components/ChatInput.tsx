@@ -1,11 +1,5 @@
 import { useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 type ChatInputProps = {
   disabled?: boolean;
@@ -45,10 +39,7 @@ export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
         placeholder="Ask Troli anything about your day."
         placeholderTextColor="#8d8377"
         returnKeyType="send"
-        style={[
-          styles.input,
-          disabled ? styles.inputDisabled : null,
-        ]}
+        style={[styles.input, disabled ? styles.inputDisabled : null]}
         value={text}
       />
       <Pressable
@@ -61,7 +52,8 @@ export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
           styles.button,
           !canSend ? styles.buttonDisabled : null,
           pressed && canSend ? styles.buttonPressed : null,
-        ]}>
+        ]}
+      >
         <Text style={styles.buttonText}>Send</Text>
       </Pressable>
     </View>

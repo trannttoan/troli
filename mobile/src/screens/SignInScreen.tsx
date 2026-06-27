@@ -17,7 +17,8 @@ export function SignInScreen() {
         <View style={styles.card}>
           <Text style={styles.title}>Troli</Text>
           <Text style={styles.subtitle}>
-            Add `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` to `mobile/.env` before testing sign-in.
+            Add `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` to `mobile/.env` before
+            testing sign-in.
           </Text>
         </View>
       </View>
@@ -43,21 +44,16 @@ function ConfiguredSignInScreen() {
   const [request, response, promptAsync] = Google.useAuthRequest(authConfig);
 
   useEffect(() => {
-    if (!response) {
-      return;
-    }
-
-    setIsPrompting(false);
-
-    if (response.type === 'opened' || response.type === 'locked') {
+    if (!response || response.type === 'opened' || response.type === 'locked') {
       return;
     }
 
     let cancelled = false;
 
-    setIsProcessingResponse(true);
-
     void (async () => {
+      setIsPrompting(false);
+      setIsProcessingResponse(true);
+
       try {
         const session = await buildSessionFromAuthResponse(response);
 
@@ -73,7 +69,9 @@ function ConfiguredSignInScreen() {
         }
 
         setLocalError(
-          error instanceof Error ? error.message : 'Unable to sign in with Google.',
+          error instanceof Error
+            ? error.message
+            : 'Unable to sign in with Google.',
         );
       } finally {
         if (!cancelled) {
@@ -104,7 +102,9 @@ function ConfiguredSignInScreen() {
     } catch (error) {
       setIsPrompting(false);
       setLocalError(
-        error instanceof Error ? error.message : 'Unable to open Google sign-in.',
+        error instanceof Error
+          ? error.message
+          : 'Unable to open Google sign-in.',
       );
     }
   }
@@ -117,7 +117,9 @@ function ConfiguredSignInScreen() {
         <Text style={styles.subtitle}>
           Sign in with Google to unlock your single persistent chat thread.
         </Text>
-        {visibleError ? <Text style={styles.errorText}>{visibleError}</Text> : null}
+        {visibleError ? (
+          <Text style={styles.errorText}>{visibleError}</Text>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           disabled={!request || isBusy}
@@ -128,7 +130,8 @@ function ConfiguredSignInScreen() {
             styles.button,
             (!request || isBusy) && styles.buttonDisabled,
             pressed && !isBusy ? styles.buttonPressed : null,
-          ]}>
+          ]}
+        >
           <Text style={styles.buttonText}>
             {isBusy ? 'Signing in…' : 'Sign in with Google'}
           </Text>

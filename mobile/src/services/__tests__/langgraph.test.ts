@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
 
 jest.mock('../sse', () => ({
   consumeSseStream: jest.fn(),
@@ -13,7 +20,10 @@ import {
   streamRun,
 } from '../langgraph';
 
-function createJsonResponse(payload: unknown, init: ResponseInit = {}): Response {
+function createJsonResponse(
+  payload: unknown,
+  init: ResponseInit = {},
+): Response {
   return new Response(JSON.stringify(payload), {
     headers: {
       'content-type': 'application/json',
@@ -29,7 +39,8 @@ describe('langgraph service', () => {
   beforeEach(() => {
     global.fetch = fetchMock as typeof fetch;
     process.env.EXPO_PUBLIC_LANGGRAPH_API_KEY = 'langgraph-api-key';
-    process.env.EXPO_PUBLIC_LANGGRAPH_API_URL = 'https://langgraph.example.com/';
+    process.env.EXPO_PUBLIC_LANGGRAPH_API_URL =
+      'https://langgraph.example.com/';
     process.env.EXPO_PUBLIC_LANGGRAPH_ASSISTANT_ID = 'agent';
   });
 
@@ -220,7 +231,8 @@ describe('langgraph service', () => {
   });
 
   it('throws with config hint when 404 and url points to langsmith', async () => {
-    process.env.EXPO_PUBLIC_LANGGRAPH_API_URL = 'https://api.smith.langchain.com/';
+    process.env.EXPO_PUBLIC_LANGGRAPH_API_URL =
+      'https://api.smith.langchain.com/';
 
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ detail: 'Not found' }), {

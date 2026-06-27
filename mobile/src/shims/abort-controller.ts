@@ -22,7 +22,10 @@ export class AbortSignal {
 
   private readonly listeners = new Set<(event: AbortEvent) => void>();
 
-  addEventListener(type: string, listener: ((event: AbortEvent) => void) | null) {
+  addEventListener(
+    type: string,
+    listener: ((event: AbortEvent) => void) | null,
+  ) {
     if (type !== 'abort' || !listener) {
       return;
     }

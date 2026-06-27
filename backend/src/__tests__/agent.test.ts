@@ -1,22 +1,28 @@
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AIMessage, HumanMessage } from '@langchain/core/messages';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TroliAuthError } from "../utils/auth.js";
-import { generateThreadId } from "../utils/thread.js";
-import { getMessageTimestamp, stampMessage } from "../utils/timestamp.js";
+import { TroliAuthError } from '../utils/auth.js';
+import { fetchWithAuth } from '../utils/google-api.js';
+import { generateThreadId } from '../utils/thread.js';
+import { getMessageTimestamp, stampMessage } from '../utils/timestamp.js';
 
 const modelInvokeSpy = vi.fn();
+const modelBindToolsSpy = vi.fn();
 
-vi.mock("@langchain/google-genai", () => {
+vi.mock('@langchain/google-genai', () => {
   return {
     ChatGoogleGenerativeAI: class MockChatGoogleGenerativeAI {
+      bindTools = modelBindToolsSpy.mockImplementation(() => ({
+        invoke: modelInvokeSpy,
+      }));
+
       invoke = modelInvokeSpy;
     },
   };
 });
 
-vi.mock("../utils/auth.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../utils/auth.js")>();
+vi.mock('../utils/auth.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/auth.js')>();
 
   return {
     ...actual,
@@ -25,64 +31,77 @@ vi.mock("../utils/auth.js", async (importOriginal) => {
   };
 });
 
-import { graph } from "../agent.js";
+vi.mock('../utils/google-api.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../utils/google-api.js')>();
+
+  return {
+    ...actual,
+    fetchWithAuth: vi.fn(),
+  };
+});
+
+import { graph } from '../agent.js';
 import {
   validateGoogleToken,
   verifyThreadAuthorization,
-} from "../utils/auth.js";
+} from '../utils/auth.js';
 
 const FIXED_TIMESTAMP = Date.UTC(2026, 0, 15, 10, 0, 0);
-const TEST_EMAIL = "test@example.com";
+const TEST_EMAIL = 'test@example.com';
 const TEST_THREAD_ID = generateThreadId(TEST_EMAIL);
 
 function buildConfig(overrides: Record<string, unknown> = {}) {
   return {
     configurable: {
-      access_token: "test-access-token",
+      access_token: 'test-access-token',
       thread_id: TEST_THREAD_ID,
-      timezone: "America/New_York",
+      timezone: 'America/New_York',
       ...overrides,
     },
   };
 }
 
-describe("agent graph", () => {
+describe('agent graph', () => {
   beforeEach(() => {
-    modelInvokeSpy.mockResolvedValue(new AIMessage("mocked response"));
+    modelInvokeSpy.mockResolvedValue(new AIMessage('mocked response'));
+    modelBindToolsSpy.mockClear();
 
-    process.env.GOOGLE_API_KEY = "test-api-key";
+    process.env.GOOGLE_API_KEY = 'test-api-key';
 
     vi.mocked(validateGoogleToken).mockResolvedValue({ email: TEST_EMAIL });
     vi.mocked(verifyThreadAuthorization).mockImplementation(() => {});
+    vi.mocked(fetchWithAuth).mockResolvedValue({ items: [] });
 
-    vi.spyOn(Date, "now").mockReturnValue(FIXED_TIMESTAMP);
+    vi.spyOn(Date, 'now').mockReturnValue(FIXED_TIMESTAMP);
   });
 
   afterEach(() => {
     modelInvokeSpy.mockReset();
+    vi.mocked(fetchWithAuth).mockReset();
     vi.restoreAllMocks();
     delete process.env.GOOGLE_API_KEY;
   });
 
-  describe("auth gating", () => {
-    it("calls validateGoogleToken with the run config", async () => {
+  describe('auth gating', () => {
+    it('calls validateGoogleToken with the run config', async () => {
       await graph.invoke(
-        { messages: [new HumanMessage("Hello")] },
+        { messages: [new HumanMessage('Hello')] },
         buildConfig(),
       );
 
       expect(validateGoogleToken).toHaveBeenCalledWith(
         expect.objectContaining({
           configurable: expect.objectContaining({
-            access_token: "test-access-token",
+            access_token: 'test-access-token',
           }),
         }),
       );
     });
 
-    it("calls verifyThreadAuthorization with the validated email", async () => {
+    it('calls verifyThreadAuthorization with the validated email', async () => {
       await graph.invoke(
-        { messages: [new HumanMessage("Hello")] },
+        { messages: [new HumanMessage('Hello')] },
         buildConfig(),
       );
 
@@ -96,61 +115,55 @@ describe("agent graph", () => {
       );
     });
 
-    it("rejects when token validation fails", async () => {
+    it('rejects when token validation fails', async () => {
       vi.mocked(validateGoogleToken).mockRejectedValue(
-        new TroliAuthError("AUTH_INVALID_TOKEN", "bad token", {
+        new TroliAuthError('AUTH_INVALID_TOKEN', 'bad token', {
           retryable: false,
           status: 401,
         }),
       );
 
       await expect(
-        graph.invoke(
-          { messages: [new HumanMessage("Hello")] },
-          buildConfig(),
-        ),
-      ).rejects.toMatchObject({ code: "AUTH_INVALID_TOKEN" });
+        graph.invoke({ messages: [new HumanMessage('Hello')] }, buildConfig()),
+      ).rejects.toMatchObject({ code: 'AUTH_INVALID_TOKEN' });
     });
 
-    it("rejects when thread authorization fails", async () => {
+    it('rejects when thread authorization fails', async () => {
       vi.mocked(verifyThreadAuthorization).mockImplementation(() => {
-        throw new TroliAuthError("AUTH_THREAD_MISMATCH", "wrong thread", {
+        throw new TroliAuthError('AUTH_THREAD_MISMATCH', 'wrong thread', {
           retryable: false,
           status: 403,
         });
       });
 
       await expect(
-        graph.invoke(
-          { messages: [new HumanMessage("Hello")] },
-          buildConfig(),
-        ),
-      ).rejects.toMatchObject({ code: "AUTH_THREAD_MISMATCH" });
+        graph.invoke({ messages: [new HumanMessage('Hello')] }, buildConfig()),
+      ).rejects.toMatchObject({ code: 'AUTH_THREAD_MISMATCH' });
     });
   });
 
-  describe("preprocessing", () => {
-    it("stamps the latest human message with the current timestamp", async () => {
+  describe('preprocessing', () => {
+    it('stamps the latest human message with the current timestamp', async () => {
       const result = await graph.invoke(
-        { messages: [new HumanMessage("Hello")] },
+        { messages: [new HumanMessage('Hello')] },
         buildConfig(),
       );
 
       const humanMessage = result.messages.find(
-        (m: { _getType: () => string }) => m._getType() === "human",
+        (m: { _getType: () => string }) => m._getType() === 'human',
       );
 
       expect(getMessageTimestamp(humanMessage!)).toBe(FIXED_TIMESTAMP);
     });
 
-    it("passes only windowed messages to the model", async () => {
+    it('windows the persisted messages before invoking the model', async () => {
       const staleTimestamp = FIXED_TIMESTAMP - 8 * 24 * 60 * 60 * 1000;
 
-      await graph.invoke(
+      const result = await graph.invoke(
         {
           messages: [
-            stampMessage(new HumanMessage("stale"), staleTimestamp),
-            new HumanMessage("recent"),
+            stampMessage(new HumanMessage('stale'), staleTimestamp),
+            new HumanMessage('recent'),
           ],
         },
         buildConfig(),
@@ -158,45 +171,50 @@ describe("agent graph", () => {
 
       const invokeArgs = modelInvokeSpy.mock.calls[0]![0];
       const humanInputs = invokeArgs.filter(
-        (m: { _getType: () => string }) => m._getType() === "human",
+        (m: { _getType: () => string }) => m._getType() === 'human',
       );
 
       expect(humanInputs).toHaveLength(1);
-      expect(humanInputs[0].content).toBe("recent");
+      expect(humanInputs[0].content).toBe('recent');
+      expect(
+        result.messages.some(
+          (message: { content: unknown }) => message.content === 'stale',
+        ),
+      ).toBe(false);
     });
   });
 
-  describe("agent node", () => {
-    it("invokes the model with a SystemMessage and the windowed input", async () => {
+  describe('agent node', () => {
+    it('invokes the model with a SystemMessage and the windowed messages', async () => {
       await graph.invoke(
-        { messages: [new HumanMessage("Hello")] },
+        { messages: [new HumanMessage('Hello')] },
         buildConfig(),
       );
 
       const invokeArgs = modelInvokeSpy.mock.calls[0]![0];
 
-      expect(invokeArgs[0]._getType()).toBe("system");
-      expect(invokeArgs[1]._getType()).toBe("human");
-      expect(invokeArgs[1].content).toBe("Hello");
+      expect(invokeArgs[0]._getType()).toBe('system');
+      expect(invokeArgs[1]._getType()).toBe('human');
+      expect(invokeArgs[1].content).toBe('Hello');
     });
 
-    it("includes the configured timezone in the system prompt", async () => {
+    it('includes the configured timezone in the system prompt', async () => {
       await graph.invoke(
-        { messages: [new HumanMessage("Hello")] },
-        buildConfig({ timezone: "America/New_York" }),
+        { messages: [new HumanMessage('Hello')] },
+        buildConfig({ timezone: 'America/New_York' }),
       );
 
       const systemMessage = modelInvokeSpy.mock.calls[0]![0][0];
 
-      expect(systemMessage.content).toContain("America/New_York");
+      expect(systemMessage.content).toContain('America/New_York');
     });
 
-    it("falls back to UTC when timezone is missing", async () => {
+    it('falls back to UTC when timezone is missing', async () => {
       await graph.invoke(
-        { messages: [new HumanMessage("Hello")] },
+        { messages: [new HumanMessage('Hello')] },
         {
           configurable: {
-            access_token: "test-access-token",
+            access_token: 'test-access-token',
             thread_id: TEST_THREAD_ID,
           },
         },
@@ -207,53 +225,53 @@ describe("agent graph", () => {
       expect(systemMessage.content).toContain("User's timezone: UTC");
     });
 
-    it("stamps the model response with a timestamp", async () => {
+    it('stamps the model response with a timestamp', async () => {
       const result = await graph.invoke(
-        { messages: [new HumanMessage("Hello")] },
+        { messages: [new HumanMessage('Hello')] },
         buildConfig(),
       );
 
       const aiMessage = result.messages.find(
-        (m: { _getType: () => string }) => m._getType() === "ai",
+        (m: { _getType: () => string }) => m._getType() === 'ai',
       );
 
       expect(getMessageTimestamp(aiMessage!)).toBe(FIXED_TIMESTAMP);
     });
 
-    it("returns the model response in the messages array", async () => {
+    it('returns the model response in the messages array', async () => {
       const result = await graph.invoke(
-        { messages: [new HumanMessage("Hello")] },
+        { messages: [new HumanMessage('Hello')] },
         buildConfig(),
       );
 
       const aiMessage = result.messages.find(
-        (m: { _getType: () => string }) => m._getType() === "ai",
+        (m: { _getType: () => string }) => m._getType() === 'ai',
       );
 
-      expect(aiMessage!.content).toBe("mocked response");
+      expect(aiMessage!.content).toBe('mocked response');
     });
   });
 
-  describe("end-to-end", () => {
-    it("returns the stamped input and model response", async () => {
+  describe('end-to-end', () => {
+    it('returns the stamped input and model response', async () => {
       const result = await graph.invoke(
-        { messages: [new HumanMessage("Hello")] },
+        { messages: [new HumanMessage('Hello')] },
         buildConfig(),
       );
 
       expect(result.messages).toHaveLength(2);
-      expect(result.messages[0]._getType()).toBe("human");
-      expect(result.messages[1]._getType()).toBe("ai");
+      expect(result.messages[0]._getType()).toBe('human');
+      expect(result.messages[1]._getType()).toBe('ai');
     });
 
-    it("preserves timestamps on earlier messages", async () => {
+    it('preserves timestamps on earlier messages', async () => {
       const earlierTimestamp = FIXED_TIMESTAMP - 1000;
       const result = await graph.invoke(
         {
           messages: [
-            stampMessage(new HumanMessage("first"), earlierTimestamp),
-            stampMessage(new AIMessage("reply"), earlierTimestamp + 500),
-            new HumanMessage("second"),
+            stampMessage(new HumanMessage('first'), earlierTimestamp),
+            stampMessage(new AIMessage('reply'), earlierTimestamp + 500),
+            new HumanMessage('second'),
           ],
         },
         buildConfig(),
@@ -262,6 +280,70 @@ describe("agent graph", () => {
       expect(result.messages).toHaveLength(4);
       expect(getMessageTimestamp(result.messages[0]!)).toBe(earlierTimestamp);
       expect(getMessageTimestamp(result.messages[2]!)).toBe(FIXED_TIMESTAMP);
+    });
+
+    it('completes the tool loop when the model calls list_calendar_events', async () => {
+      modelInvokeSpy
+        .mockResolvedValueOnce(
+          new AIMessage({
+            content: '',
+            tool_calls: [
+              {
+                id: 'tool-call-1',
+                name: 'list_calendar_events',
+                args: {
+                  timeMin: '2026-01-16T00:00:00-05:00',
+                  timeMax: '2026-01-17T00:00:00-05:00',
+                },
+                type: 'tool_call',
+              },
+            ],
+          }),
+        )
+        .mockResolvedValueOnce(
+          new AIMessage('You have one event tomorrow: Team Sync at 9:00 AM.'),
+        );
+      vi.mocked(fetchWithAuth).mockResolvedValue({
+        items: [
+          {
+            id: 'event-1',
+            summary: 'Team Sync',
+            start: { dateTime: '2026-01-16T09:00:00-05:00' },
+            end: { dateTime: '2026-01-16T09:30:00-05:00' },
+          },
+        ],
+      });
+
+      const result = await graph.invoke(
+        {
+          messages: [new HumanMessage("What's on my calendar tomorrow?")],
+        },
+        buildConfig(),
+      );
+
+      expect(modelBindToolsSpy).toHaveBeenCalled();
+      expect(modelInvokeSpy).toHaveBeenCalledTimes(2);
+      expect(fetchWithAuth).toHaveBeenCalledWith(
+        expect.stringContaining('/calendars/primary/events?'),
+        expect.objectContaining({ method: 'GET' }),
+        'test-access-token',
+      );
+
+      const secondInvokeArgs = modelInvokeSpy.mock.calls[1]![0];
+      const toolMessage = secondInvokeArgs.find(
+        (message: { _getType: () => string }) => message._getType() === 'tool',
+      );
+
+      expect(toolMessage?.content).toContain('Team Sync');
+
+      const resultToolMessage = result.messages.find(
+        (m: { _getType: () => string }) => m._getType() === 'tool',
+      );
+
+      expect(getMessageTimestamp(resultToolMessage!)).toBe(FIXED_TIMESTAMP);
+      expect(result.messages[result.messages.length - 1]?.content).toBe(
+        'You have one event tomorrow: Team Sync at 9:00 AM.',
+      );
     });
   });
 });

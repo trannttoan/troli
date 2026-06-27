@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from '@jest/globals';
 
 jest.mock('expo-secure-store', () => ({
   AFTER_FIRST_UNLOCK: 'after-first-unlock',
@@ -8,10 +15,19 @@ jest.mock('expo-secure-store', () => ({
 }));
 
 jest.mock('../../utils/auth', () => ({
+  GOOGLE_SCOPES: [
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/calendar.events.owned',
+  ],
   getGoogleIosClientId: jest.fn(() => 'ios-client-id'),
-  isForceReauthError: jest.fn((error: unknown) => (error as { code?: string })?.code === 'force'),
+  isForceReauthError: jest.fn(
+    (error: unknown) => (error as { code?: string })?.code === 'force',
+  ),
   isRefreshTimeoutError: jest.fn(
-    (error: unknown) => (error as { code?: string })?.code === 'refresh_timeout',
+    (error: unknown) =>
+      (error as { code?: string })?.code === 'refresh_timeout',
   ),
   refreshGoogleAccessToken: jest.fn(),
 }));
@@ -27,6 +43,12 @@ const baseSession = {
   email: 'person@example.com',
   expiryAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
   refreshToken: 'initial-refresh-token',
+  scopes: [
+    'https://www.googleapis.com/auth/calendar.events.owned',
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+  ],
 };
 
 async function loadAuthModule(): Promise<LoadedAuthModule> {
@@ -35,7 +57,8 @@ async function loadAuthModule(): Promise<LoadedAuthModule> {
   return {
     authStore: require('../auth') as typeof import('../auth'),
     authUtils: require('../../utils/auth') as typeof import('../../utils/auth'),
-    secureStore: require('expo-secure-store') as typeof import('expo-secure-store'),
+    secureStore:
+      require('expo-secure-store') as typeof import('expo-secure-store'),
   };
 }
 
@@ -50,7 +73,9 @@ describe('useAuthStore', () => {
 
   it('refreshes the token when it expires within five minutes', async () => {
     const { authStore, authUtils } = await loadAuthModule();
-    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+    const refreshGoogleAccessToken = jest.mocked(
+      authUtils.refreshGoogleAccessToken,
+    );
 
     refreshGoogleAccessToken.mockResolvedValue({
       accessToken: 'fresh-access-token',
@@ -63,9 +88,9 @@ describe('useAuthStore', () => {
       expiryAt: new Date(Date.now() + 4 * 60 * 1000).toISOString(),
     });
 
-    await expect(authStore.useAuthStore.getState().getValidToken()).resolves.toBe(
-      'fresh-access-token',
-    );
+    await expect(
+      authStore.useAuthStore.getState().getValidToken(),
+    ).resolves.toBe('fresh-access-token');
     expect(refreshGoogleAccessToken).toHaveBeenCalledTimes(1);
     expect(refreshGoogleAccessToken).toHaveBeenCalledWith({
       clientId: 'ios-client-id',
@@ -80,7 +105,9 @@ describe('useAuthStore', () => {
 
   it('deduplicates concurrent refreshes behind a shared mutex', async () => {
     const { authStore, authUtils } = await loadAuthModule();
-    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+    const refreshGoogleAccessToken = jest.mocked(
+      authUtils.refreshGoogleAccessToken,
+    );
     let resolveRefresh:
       | ((value: {
           accessToken: string;
@@ -127,7 +154,7 @@ describe('useAuthStore', () => {
     await authStore.useAuthStore.getState().signIn(baseSession);
     await authStore.useAuthStore.getState().signOut('Session expired.');
 
-    expect(jest.mocked(secureStore.deleteItemAsync)).toHaveBeenCalledTimes(4);
+    expect(jest.mocked(secureStore.deleteItemAsync)).toHaveBeenCalledTimes(5);
     expect(resetChatState).toHaveBeenCalledTimes(1);
     expect(authStore.useAuthStore.getState()).toMatchObject({
       accessToken: null,
@@ -141,13 +168,15 @@ describe('useAuthStore', () => {
 
   it('returns the current token without refreshing when it is still valid', async () => {
     const { authStore, authUtils } = await loadAuthModule();
-    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+    const refreshGoogleAccessToken = jest.mocked(
+      authUtils.refreshGoogleAccessToken,
+    );
 
     await authStore.useAuthStore.getState().signIn(baseSession);
 
-    await expect(authStore.useAuthStore.getState().getValidToken()).resolves.toBe(
-      'initial-access-token',
-    );
+    await expect(
+      authStore.useAuthStore.getState().getValidToken(),
+    ).resolves.toBe('initial-access-token');
     expect(refreshGoogleAccessToken).not.toHaveBeenCalled();
   });
 
@@ -156,26 +185,33 @@ describe('useAuthStore', () => {
 
     authStore.useAuthStore.setState({ status: 'signed_out' });
 
-    await expect(authStore.useAuthStore.getState().getValidToken()).rejects.toThrow(
-      'User is not authenticated.',
-    );
+    await expect(
+      authStore.useAuthStore.getState().getValidToken(),
+    ).rejects.toThrow('User is not authenticated.');
   });
 
   it('signs out when refresh fails with a force-reauth error', async () => {
     const { authStore, authUtils } = await loadAuthModule();
-    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+    const refreshGoogleAccessToken = jest.mocked(
+      authUtils.refreshGoogleAccessToken,
+    );
     const resetChatState = jest.fn();
 
     authStore.__setLoadChatStoreModuleForTest(async () => ({ resetChatState }));
 
-    refreshGoogleAccessToken.mockRejectedValue({ code: 'force', message: 'Reauth required' });
+    refreshGoogleAccessToken.mockRejectedValue({
+      code: 'force',
+      message: 'Reauth required',
+    });
 
     await authStore.useAuthStore.getState().signIn({
       ...baseSession,
       expiryAt: new Date(Date.now() + 60_000).toISOString(),
     });
 
-    await expect(authStore.useAuthStore.getState().getValidToken()).rejects.toBeDefined();
+    await expect(
+      authStore.useAuthStore.getState().getValidToken(),
+    ).rejects.toBeDefined();
 
     expect(authStore.useAuthStore.getState().status).toBe('signed_out');
     expect(resetChatState).toHaveBeenCalledTimes(1);
@@ -185,7 +221,9 @@ describe('useAuthStore', () => {
 
   it('sets errorMessage without signing out on a non-fatal refresh error', async () => {
     const { authStore, authUtils } = await loadAuthModule();
-    const refreshGoogleAccessToken = jest.mocked(authUtils.refreshGoogleAccessToken);
+    const refreshGoogleAccessToken = jest.mocked(
+      authUtils.refreshGoogleAccessToken,
+    );
 
     refreshGoogleAccessToken.mockRejectedValue(new Error('Network error'));
 
@@ -194,12 +232,14 @@ describe('useAuthStore', () => {
       expiryAt: new Date(Date.now() + 60_000).toISOString(),
     });
 
-    await expect(authStore.useAuthStore.getState().getValidToken()).rejects.toThrow(
-      'Network error',
-    );
+    await expect(
+      authStore.useAuthStore.getState().getValidToken(),
+    ).rejects.toThrow('Network error');
 
     expect(authStore.useAuthStore.getState().status).toBe('signed_in');
-    expect(authStore.useAuthStore.getState().errorMessage).toBe('Network error');
+    expect(authStore.useAuthStore.getState().errorMessage).toBe(
+      'Network error',
+    );
   });
 
   it('clears errorMessage via clearError', async () => {
@@ -223,6 +263,7 @@ describe('useAuthStore', () => {
         auth_refresh_token: 'stored-refresh',
         auth_token_expiry: '2099-01-01T00:00:00.000Z',
         auth_user_email: 'stored@example.com',
+        auth_granted_scopes: JSON.stringify(baseSession.scopes),
       };
 
       return Promise.resolve(stored[key] ?? null);
@@ -238,6 +279,42 @@ describe('useAuthStore', () => {
     });
   });
 
+  it('signs out during initialize when stored scopes are missing the calendar scope', async () => {
+    const { authStore, secureStore } = await loadAuthModule();
+    const getItemAsync = jest.mocked(secureStore.getItemAsync);
+    const deleteItemAsync = jest.mocked(secureStore.deleteItemAsync);
+    const resetChatState = jest.fn();
+
+    authStore.__setLoadChatStoreModuleForTest(async () => ({ resetChatState }));
+
+    getItemAsync.mockImplementation((key: string) => {
+      const stored: Record<string, string> = {
+        auth_access_token: 'stored-access',
+        auth_refresh_token: 'stored-refresh',
+        auth_token_expiry: '2099-01-01T00:00:00.000Z',
+        auth_user_email: 'stored@example.com',
+        auth_granted_scopes: JSON.stringify([
+          'openid',
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
+        ]),
+      };
+
+      return Promise.resolve(stored[key] ?? null);
+    });
+
+    await authStore.useAuthStore.getState().initialize();
+
+    expect(deleteItemAsync).toHaveBeenCalledTimes(5);
+    expect(resetChatState).toHaveBeenCalledTimes(1);
+    expect(authStore.useAuthStore.getState()).toMatchObject({
+      errorMessage: 'Troli now needs calendar access. Please sign in again.',
+      status: 'signed_out',
+    });
+
+    authStore.__setLoadChatStoreModuleForTest(null);
+  });
+
   it('clears partial session data during initialize and stays signed out', async () => {
     const { authStore, secureStore } = await loadAuthModule();
     const getItemAsync = jest.mocked(secureStore.getItemAsync);
@@ -250,7 +327,7 @@ describe('useAuthStore', () => {
 
     await authStore.useAuthStore.getState().initialize();
 
-    expect(deleteItemAsync).toHaveBeenCalledTimes(4);
+    expect(deleteItemAsync).toHaveBeenCalledTimes(5);
     expect(authStore.useAuthStore.getState().status).toBe('signed_out');
   });
 
@@ -260,7 +337,7 @@ describe('useAuthStore', () => {
 
     await authStore.useAuthStore.getState().signIn(baseSession);
 
-    expect(setItemAsync).toHaveBeenCalledTimes(4);
+    expect(setItemAsync).toHaveBeenCalledTimes(5);
     expect(setItemAsync).toHaveBeenCalledWith(
       'auth_access_token',
       'initial-access-token',
@@ -271,5 +348,10 @@ describe('useAuthStore', () => {
       'person@example.com',
       expect.anything(),
     );
+    expect(setItemAsync.mock.calls).toContainEqual([
+      'auth_granted_scopes',
+      JSON.stringify([...baseSession.scopes].sort()),
+      expect.anything(),
+    ]);
   });
 });
