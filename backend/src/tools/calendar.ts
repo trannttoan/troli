@@ -20,6 +20,18 @@ type CalendarEvent = {
   end?: CalendarEventDateTime;
 };
 
+type CalendarEventAttendee = {
+  email?: string;
+  displayName?: string;
+};
+
+type DetailedCalendarEvent = CalendarEvent & {
+  description?: string;
+  attendees?: CalendarEventAttendee[];
+  status?: string;
+  htmlLink?: string;
+};
+
 type ListCalendarEventsResponse = {
   items?: CalendarEvent[];
 };
@@ -122,6 +134,59 @@ function formatCalendarEvents(events: CalendarEvent[]): string {
   return `Calendar events:\n${lines.join('\n')}`;
 }
 
+function formatEventAttendee(attendee: CalendarEventAttendee): string | null {
+  const email = attendee.email?.trim();
+  const displayName = attendee.displayName?.trim();
+
+  if (displayName && email) {
+    return `${displayName} <${email}>`;
+  }
+
+  if (email) {
+    return email;
+  }
+
+  if (displayName) {
+    return displayName;
+  }
+
+  return null;
+}
+
+function formatEventDetail(event: DetailedCalendarEvent): string {
+  const summary = event.summary?.trim() || 'Untitled event';
+  const lines = [`Event: ${summary}`, `When: ${formatEventDateRange(event)}`];
+  const location = event.location?.trim();
+  const description = event.description?.trim();
+  const attendees = (event.attendees ?? [])
+    .map(formatEventAttendee)
+    .filter((attendee): attendee is string => attendee !== null);
+  const status = event.status?.trim();
+  const htmlLink = event.htmlLink?.trim();
+
+  if (location) {
+    lines.push(`Location: ${location}`);
+  }
+
+  if (description) {
+    lines.push(`Description: ${description}`);
+  }
+
+  if (attendees.length > 0) {
+    lines.push(`Attendees: ${attendees.join(', ')}`);
+  }
+
+  if (status) {
+    lines.push(`Status: ${status}`);
+  }
+
+  if (htmlLink) {
+    lines.push(`Link: ${htmlLink}`);
+  }
+
+  return lines.join('\n');
+}
+
 export const listCalendarEvents = tool(
   async ({ timeMin, timeMax, query }, config) => {
     const accessToken = getAccessToken(config);
@@ -160,4 +225,31 @@ export const listCalendarEvents = tool(
   },
 );
 
-export const calendarTools = [listCalendarEvents];
+export const getCalendarEvent = tool(
+  async ({ eventId }, config) => {
+    const accessToken = getAccessToken(config);
+    const response = await fetchWithAuth<DetailedCalendarEvent>(
+      `${GOOGLE_CALENDAR_API_BASE_URL}/calendars/primary/events/${encodeURIComponent(eventId)}`,
+      {
+        method: 'GET',
+      },
+      accessToken,
+    );
+
+    return formatEventDetail(response ?? { id: eventId });
+  },
+  {
+    name: 'get_calendar_event',
+    description:
+      "Get the details for a single event from the user's primary Google Calendar.",
+    schema: z.object({
+      eventId: z
+        .string()
+        .trim()
+        .min(1)
+        .describe('Google Calendar event ID to retrieve.'),
+    }),
+  },
+);
+
+export const calendarTools = [listCalendarEvents, getCalendarEvent];
