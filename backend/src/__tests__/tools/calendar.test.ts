@@ -413,6 +413,50 @@ describe('createCalendarEvent', () => {
     expect(fetchWithAuth).not.toHaveBeenCalled();
   });
 
+  it('rejects impossible calendar dates', async () => {
+    await expect(
+      createCalendarEvent.invoke(
+        { summary: 'Bad date', startDate: '2026-02-31' },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      createCalendarEvent.invoke(
+        { summary: 'Bad date', startDate: '2026-06-31' },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow();
+
+    expect(fetchWithAuth).not.toHaveBeenCalled();
+  });
+
+  it('rejects inverted date ranges', async () => {
+    await expect(
+      createCalendarEvent.invoke(
+        {
+          summary: 'Backwards all-day',
+          startDate: '2026-03-15',
+          endDate: '2026-03-10',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      createCalendarEvent.invoke(
+        {
+          summary: 'Backwards timed',
+          startDateTime: '2026-05-01T14:00:00-04:00',
+          endDateTime: '2026-05-01T10:00:00-04:00',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow();
+
+    expect(fetchWithAuth).not.toHaveBeenCalled();
+  });
+
   it('rejects when the access token is missing from the run config', async () => {
     await expect(
       createCalendarEvent.invoke(
