@@ -32,6 +32,7 @@ export function ChatScreen() {
   const isBootstrapping = useChatStore((state) => state.isBootstrapping);
   const isSending = useChatStore((state) => state.isSending);
   const messages = useChatStore((state) => state.messages);
+  const hasStreamingMessage = messages.some((m) => m.status === 'streaming');
   const sendMessage = useChatStore((state) => state.sendMessage);
   const signOut = useAuthStore((state) => state.signOut);
   const hasBootstrappedRef = useRef(false);
@@ -148,7 +149,9 @@ export function ChatScreen() {
                   </Text>
                 </View>
               }
-              ListFooterComponent={isSending ? <TypingIndicator /> : null}
+              ListFooterComponent={
+                isSending && !hasStreamingMessage ? <TypingIndicator /> : null
+              }
               onScrollBeginDrag={() => {
                 Keyboard.dismiss();
               }}
