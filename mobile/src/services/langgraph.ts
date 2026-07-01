@@ -139,10 +139,12 @@ export async function streamRun(input: StreamRunInput): Promise<void> {
 
       await input.onEvent?.(parsedEvent);
 
-      const snapshot = extractAssistantTextSnapshot(parsedEvent.json);
+      if (event.event === 'messages/partial') {
+        const snapshot = extractAssistantTextSnapshot(parsedEvent.json);
 
-      if (snapshot) {
-        await input.onAssistantTextSnapshot?.(snapshot);
+        if (snapshot) {
+          await input.onAssistantTextSnapshot?.(snapshot);
+        }
       }
     },
     response,

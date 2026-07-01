@@ -149,7 +149,7 @@ describe('langgraph service', () => {
             role: 'assistant',
           },
         }),
-        event: 'message',
+        event: 'messages/partial',
       });
       await onEvent({
         data: JSON.stringify({
@@ -160,7 +160,7 @@ describe('langgraph service', () => {
             },
           },
         }),
-        event: 'message',
+        event: 'messages/partial',
       });
       await onEvent({
         data: '[DONE]',
@@ -194,6 +194,47 @@ describe('langgraph service', () => {
     expect(onEvent).toHaveBeenCalledTimes(2);
     expect(onAssistantTextSnapshot).toHaveBeenNthCalledWith(1, 'Hello');
     expect(onAssistantTextSnapshot).toHaveBeenNthCalledWith(2, 'Hello world');
+  });
+
+  it('ignores messages/complete events from preprocess node', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(null, {
+        headers: { 'content-type': 'text/event-stream' },
+        status: 200,
+      }),
+    );
+
+    jest.mocked(consumeSseStream).mockImplementation(async ({ onEvent }) => {
+      await onEvent({
+        data: JSON.stringify({
+          content: [{ text: 'Previous response' }],
+          type: 'AIMessage',
+        }),
+        event: 'messages/complete',
+      });
+      await onEvent({
+        data: JSON.stringify({
+          chunk: {
+            delta: [{ text: 'New response' }],
+            role: 'assistant',
+          },
+        }),
+        event: 'messages/partial',
+      });
+    });
+
+    const onAssistantTextSnapshot = jest.fn<() => Promise<void>>();
+
+    await streamRun({
+      accessToken: 'google-access-token',
+      message: 'Second message',
+      onAssistantTextSnapshot,
+      threadId: 'thread-123',
+      timezone: 'America/Detroit',
+    });
+
+    expect(onAssistantTextSnapshot).toHaveBeenCalledTimes(1);
+    expect(onAssistantTextSnapshot).toHaveBeenCalledWith('New response');
   });
 
   it('polls until the thread settles when status is busy', async () => {
