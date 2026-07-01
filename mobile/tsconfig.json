@@ -11,5 +11,6 @@
     "target": "ES2022",
     "types": ["jest", "react", "react-native"]
   },
-  "exclude": ["node_modules", "src/**/__tests__/**"]
+  "exclude": ["node_modules", "src/**/__tests__/**"],
+  "extends": "expo/tsconfig.base"
 }
