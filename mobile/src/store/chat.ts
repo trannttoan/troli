@@ -181,9 +181,14 @@ export const useChatStore = create<ChatState>((set) => ({
         const hydratedMessages = await bootstrapRemoteThread(threadId);
 
         set({
+          errorMessage:
+            hydratedMessages.status === 'error'
+              ? 'The thread reported an error after streaming. Conversation history was reloaded and you can send another message.'
+              : null,
           messages: normalizeMessages(hydratedMessages.messages),
           threadId,
         });
+        return;
       } catch {
         set((currentState) => ({
           messages: removeStreamingAssistantMessage(

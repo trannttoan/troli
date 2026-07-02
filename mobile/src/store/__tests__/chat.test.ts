@@ -213,7 +213,7 @@ describe('useChatStore', () => {
       expect(state.isSending).toBe(false);
     });
 
-    it('sets errorMessage and attempts re-hydrate on streamRun failure', async () => {
+    it('clears error and resolves when stream fails but re-hydration succeeds', async () => {
       const { chatStore, langgraph } = loadChatModule();
 
       jest
@@ -227,13 +227,34 @@ describe('useChatStore', () => {
       });
       chatStore.useChatStore.setState({ threadId: 'thread-1' });
 
-      await expect(
-        chatStore.useChatStore.getState().sendMessage('Hello'),
-      ).rejects.toThrow('Stream failed');
+      await chatStore.useChatStore.getState().sendMessage('Hello');
 
       const state = chatStore.useChatStore.getState();
 
-      expect(state.errorMessage).toBe('Stream failed');
+      expect(state.errorMessage).toBeNull();
+      expect(state.isSending).toBe(false);
+      expect(state.messages).toHaveLength(1);
+    });
+
+    it('shows thread error when stream fails and re-hydration reports error status', async () => {
+      const { chatStore, langgraph } = loadChatModule();
+
+      jest
+        .mocked(langgraph.streamRun)
+        .mockRejectedValue(new Error('Stream failed'));
+      jest.mocked(langgraph.bootstrapThread).mockResolvedValue({
+        messages: [
+          { id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 },
+        ],
+        status: 'error',
+      });
+      chatStore.useChatStore.setState({ threadId: 'thread-1' });
+
+      await chatStore.useChatStore.getState().sendMessage('Hello');
+
+      const state = chatStore.useChatStore.getState();
+
+      expect(state.errorMessage).toMatch(/error after streaming/);
       expect(state.isSending).toBe(false);
       expect(state.messages).toHaveLength(1);
     });
