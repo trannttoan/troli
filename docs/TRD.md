@@ -129,7 +129,7 @@ LangGraph.js is model-agnostic. The LLM is injected at configuration time.
 // Google (v1.0)
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 const model = new ChatGoogleGenerativeAI({
-  model: 'gemini-2.5-flash-lite',
+  model: 'gemini-3.1-flash-lite',
   temperature: 0,
 });
 

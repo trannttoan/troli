@@ -50,7 +50,7 @@ This means:
 - **Error handling**: Custom `TroliAuthError` class with `code`, `retryable`, `status` fields.
 - **Testing**: Vitest, `vi.mock()` for modules, `vi.spyOn(Date, 'now')` for time. Mocked LLM returns via `vi.fn()`.
 - **Module resolution**: ESM with `.js` extensions in imports.
-- **Model**: `ChatGoogleGenerativeAI` with `gemini-2.5-flash-lite`, `temperature: 0`.
+- **Model**: `ChatGoogleGenerativeAI` with `gemini-3.1-flash-lite`, `temperature: 0`.
 
 ### Mobile
 
