@@ -124,7 +124,7 @@ export function ChatScreen() {
                   pressed ? styles.buttonPressed : null,
                 ]}
               >
-                <Text style={styles.errorTitle}>Connection issue</Text>
+                <Text style={styles.errorTitle}>Something went wrong</Text>
                 <Text style={styles.errorBody}>{errorMessage}</Text>
                 <Text style={styles.errorHint}>Tap to dismiss</Text>
               </Pressable>

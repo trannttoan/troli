@@ -126,6 +126,8 @@ export async function streamRun(input: StreamRunInput): Promise<void> {
     },
   );
 
+  let streamError: Error | null = null;
+
   await consumeSseStream({
     onEvent: async (event) => {
       if (!event.data || event.data === '[DONE]') {
@@ -139,6 +141,11 @@ export async function streamRun(input: StreamRunInput): Promise<void> {
 
       await input.onEvent?.(parsedEvent);
 
+      if (event.event === 'error') {
+        streamError = new Error(extractStreamErrorMessage(parsedEvent.json));
+        return;
+      }
+
       if (event.event === 'messages/partial') {
         const snapshot = extractAssistantTextSnapshot(parsedEvent.json);
 
@@ -149,6 +156,10 @@ export async function streamRun(input: StreamRunInput): Promise<void> {
     },
     response,
   });
+
+  if (streamError) {
+    throw streamError;
+  }
 }
 
 async function createThread(threadId: string): Promise<void> {
@@ -308,6 +319,23 @@ function normalizeThreadMessage(
     text,
     timestamp: extractMessageTimestamp(message),
   };
+}
+
+function extractStreamErrorMessage(payload: unknown): string {
+  if (typeof payload === 'string') {
+    return payload;
+  }
+
+  if (isRecord(payload)) {
+    const message =
+      payload.message ?? payload.error ?? payload.detail ?? payload.msg;
+
+    if (typeof message === 'string') {
+      return message;
+    }
+  }
+
+  return 'The run failed with an unknown error.';
 }
 
 function extractAssistantTextSnapshot(payload: unknown): string {
