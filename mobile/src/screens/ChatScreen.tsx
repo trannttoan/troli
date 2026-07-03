@@ -1,3 +1,4 @@
+import { useNetInfo } from '@react-native-community/netinfo';
 import { useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -35,6 +36,7 @@ export function ChatScreen() {
   const hasStreamingMessage = messages.some((m) => m.status === 'streaming');
   const sendMessage = useChatStore((state) => state.sendMessage);
   const signOut = useAuthStore((state) => state.signOut);
+  const { isConnected } = useNetInfo();
   const hasBootstrappedRef = useRef(false);
   const insets = useSafeAreaInsets();
   const isConfigured = isLangGraphConfigured();
@@ -140,7 +142,7 @@ export function ChatScreen() {
 
             <View style={styles.inputWrap}>
               <ChatInput
-                disabled={isBootstrapping || isSending}
+                disabled={isBootstrapping || isSending || !isConnected}
                 onSend={(text) => sendMessage(text)}
               />
             </View>
