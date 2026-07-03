@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -39,27 +39,7 @@ export function ChatScreen() {
   const insets = useSafeAreaInsets();
   const isConfigured = isLangGraphConfigured();
   const missingConfig = useMemo(() => getMissingLangGraphConfig(), []);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const keyboardVerticalOffset = Platform.OS === 'ios' ? insets.top + 56 : 0;
-
-  useEffect(() => {
-    const showEvent =
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent =
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSubscription = Keyboard.addListener(showEvent, () => {
-      setIsKeyboardVisible(true);
-    });
-    const hideSubscription = Keyboard.addListener(hideEvent, () => {
-      setIsKeyboardVisible(false);
-    });
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, []);
 
   useEffect(() => {
     if (!isConfigured || hasBootstrappedRef.current) {
@@ -158,23 +138,6 @@ export function ChatScreen() {
               renderItem={({ item }) => <MessageBubble message={item} />}
             />
 
-            {isKeyboardVisible ? (
-              <View style={styles.keyboardAccessory}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    Keyboard.dismiss();
-                  }}
-                  style={({ pressed }) => [
-                    styles.keyboardDismissButton,
-                    pressed ? styles.buttonPressed : null,
-                  ]}
-                >
-                  <Text style={styles.keyboardDismissText}>Done</Text>
-                </Pressable>
-              </View>
-            ) : null}
-
             <View style={styles.inputWrap}>
               <ChatInput
                 disabled={isBootstrapping || isSending}
@@ -264,24 +227,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     paddingTop: 10,
-  },
-  keyboardAccessory: {
-    alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-  },
-  keyboardDismissButton: {
-    backgroundColor: '#e4efe8',
-    borderColor: '#b9d0c4',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  keyboardDismissText: {
-    color: '#1f5c4a',
-    fontSize: 13,
-    fontWeight: '700',
   },
   listContent: {
     flexGrow: 1,
