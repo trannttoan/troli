@@ -191,6 +191,8 @@ export const useChatStore = create<ChatState>((set) => ({
         return;
       } catch {
         set((currentState) => ({
+          errorMessage:
+            'Your message may have been received. Reopen the app once you are back online to reload the conversation.',
           messages: currentState.messages.filter(
             (m) => m.id !== streamingAssistantId && m.id !== userMessage.id,
           ),
