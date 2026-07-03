@@ -37,11 +37,11 @@
 
 ## C. Error Handling
 
-| #   | Scenario                       | Steps                                                                                             | Expected                                                                                                          | Status |
-| --- | ------------------------------ | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------ |
-| C1  | Backend unreachable            | 1. Stop the LangGraph dev server (or point to wrong URL). 2. Send any message.                    | Error banner with connection error. No crash. No infinite spinner. Input re-enables after error.                  | TODO   |
-| C2  | Network loss during streaming  | 1. Send a message. 2. Immediately enable airplane mode / kill network.                            | Error banner appears. Streaming message cleaned up. After restoring network, user can resend.                     | TODO   |
-| C3  | Token expired mid-conversation | 1. Start a conversation. 2. Wait for token to expire (or manually invalidate). 3. Send a message. | App attempts token refresh. If refresh succeeds, message sends. If refresh fails, forces re-auth. Does NOT crash. | PASS   |
+| #   | Scenario                       | Steps                                                                                             | Expected                                                                                                                                | Status |
+| --- | ------------------------------ | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| C1  | Backend unreachable            | 1. Stop the LangGraph dev server (or point to wrong URL). 2. Send any message.                    | Error banner with connection error. No crash. No infinite spinner. Input re-enables after error.                                        | TODO   |
+| C2  | Network loss during streaming  | 1. Send a message. 2. Immediately enable airplane mode / kill network.                            | Error banner appears. Streaming message cleaned up. After restoring network, user needs to reopen the app to see updated converstation. | PASS   |
+| C3  | Token expired mid-conversation | 1. Start a conversation. 2. Wait for token to expire (or manually invalidate). 3. Send a message. | App attempts token refresh. If refresh succeeds, message sends. If refresh fails, forces re-auth. Does NOT crash.                       | PASS   |
 
 ---
 
