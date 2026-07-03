@@ -191,9 +191,8 @@ export const useChatStore = create<ChatState>((set) => ({
         return;
       } catch {
         set((currentState) => ({
-          messages: removeStreamingAssistantMessage(
-            currentState.messages,
-            streamingAssistantId,
+          messages: currentState.messages.filter(
+            (m) => m.id !== streamingAssistantId && m.id !== userMessage.id,
           ),
         }));
       }
@@ -246,13 +245,6 @@ function upsertStreamingAssistantSnapshot(
         }
       : message,
   );
-}
-
-function removeStreamingAssistantMessage(
-  messages: ChatMessage[],
-  messageId: string,
-): ChatMessage[] {
-  return messages.filter((message) => message.id !== messageId);
 }
 
 function createLocalMessageId(role: ChatMessage['role']): string {
