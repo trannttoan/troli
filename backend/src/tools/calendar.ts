@@ -3,7 +3,7 @@ import { LangGraphRunnableConfig } from '@langchain/langgraph';
 import { z } from 'zod';
 
 import { TroliAuthError } from '../utils/auth.js';
-import { fetchWithAuth } from '../utils/google-api.js';
+import { fetchWithAuth, GoogleApiError } from '../utils/google-api.js';
 
 const GOOGLE_CALENDAR_API_BASE_URL = 'https://www.googleapis.com/calendar/v3';
 
@@ -18,6 +18,17 @@ type CalendarEvent = {
   location?: string;
   start?: CalendarEventDateTime;
   end?: CalendarEventDateTime;
+};
+
+type CalendarEventAttendee = {
+  email?: string;
+};
+
+type DetailedCalendarEvent = CalendarEvent & {
+  description?: string;
+  attendees?: CalendarEventAttendee[];
+  status?: string;
+  htmlLink?: string;
 };
 
 type ListCalendarEventsResponse = {
@@ -71,6 +82,10 @@ function buildListCalendarEventsUrl(input: {
   return url.toString();
 }
 
+function buildGetCalendarEventUrl(eventId: string): string {
+  return `${GOOGLE_CALENDAR_API_BASE_URL}/calendars/primary/events/${encodeURIComponent(eventId)}`;
+}
+
 function exclusiveEndToInclusive(exclusiveEnd: string): string {
   const date = new Date(exclusiveEnd + 'T00:00:00Z');
   date.setUTCDate(date.getUTCDate() - 1);
@@ -122,6 +137,41 @@ function formatCalendarEvents(events: CalendarEvent[]): string {
   return `Calendar events:\n${lines.join('\n')}`;
 }
 
+function formatEventDetail(event: DetailedCalendarEvent): string {
+  const summary = event.summary?.trim() || 'Untitled event';
+  const lines = [`Event: ${summary}`, `When: ${formatEventDateRange(event)}`];
+  const location = event.location?.trim();
+  const description = event.description?.trim();
+  const attendeeEmails =
+    event.attendees
+      ?.map((attendee) => attendee.email?.trim())
+      .filter((email): email is string => Boolean(email)) ?? [];
+  const status = event.status?.trim();
+  const htmlLink = event.htmlLink?.trim();
+
+  if (location) {
+    lines.push(`Location: ${location}`);
+  }
+
+  if (description) {
+    lines.push(`Description: ${description}`);
+  }
+
+  if (attendeeEmails.length > 0) {
+    lines.push(`Attendees: ${attendeeEmails.join(', ')}`);
+  }
+
+  if (status) {
+    lines.push(`Status: ${status}`);
+  }
+
+  if (htmlLink) {
+    lines.push(`Link: ${htmlLink}`);
+  }
+
+  return lines.join('\n');
+}
+
 export const listCalendarEvents = tool(
   async ({ timeMin, timeMax, query }, config) => {
     const accessToken = getAccessToken(config);
@@ -160,4 +210,44 @@ export const listCalendarEvents = tool(
   },
 );
 
-export const calendarTools = [listCalendarEvents];
+export const getCalendarEvent = tool(
+  async ({ eventId }, config) => {
+    const accessToken = getAccessToken(config);
+
+    try {
+      const event = await fetchWithAuth<DetailedCalendarEvent>(
+        buildGetCalendarEventUrl(eventId),
+        {
+          method: 'GET',
+        },
+        accessToken,
+      );
+
+      return formatEventDetail(
+        event ?? {
+          id: eventId,
+        },
+      );
+    } catch (error) {
+      if (error instanceof GoogleApiError && error.status === 404) {
+        return `No event found with ID '${eventId}'.`;
+      }
+
+      throw error;
+    }
+  },
+  {
+    name: 'get_calendar_event',
+    description:
+      "Get the details for a single event from the user's primary Google Calendar.",
+    schema: z.object({
+      eventId: z
+        .string()
+        .trim()
+        .min(1)
+        .describe('The Google Calendar event ID to fetch.'),
+    }),
+  },
+);
+
+export const calendarTools = [listCalendarEvents, getCalendarEvent];
