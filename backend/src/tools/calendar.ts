@@ -3,7 +3,7 @@ import { LangGraphRunnableConfig } from '@langchain/langgraph';
 import { z } from 'zod';
 
 import { TroliAuthError } from '../utils/auth.js';
-import { fetchWithAuth } from '../utils/google-api.js';
+import { fetchWithAuth, GoogleApiError } from '../utils/google-api.js';
 
 const GOOGLE_CALENDAR_API_BASE_URL = 'https://www.googleapis.com/calendar/v3';
 
@@ -18,6 +18,37 @@ type CalendarEvent = {
   location?: string;
   start?: CalendarEventDateTime;
   end?: CalendarEventDateTime;
+};
+
+type CalendarEventAttendee = {
+  email?: string;
+};
+
+type DetailedCalendarEvent = CalendarEvent & {
+  description?: string;
+  attendees?: CalendarEventAttendee[];
+  status?: string;
+  htmlLink?: string;
+};
+
+type CreateCalendarEventInput = {
+  summary: string;
+  startDateTime?: string;
+  endDateTime?: string;
+  startDate?: string;
+  endDate?: string;
+  location?: string;
+  description?: string;
+  attendees?: string[];
+};
+
+type CreateCalendarEventRequestBody = {
+  summary: string;
+  start: CalendarEventDateTime;
+  end: CalendarEventDateTime;
+  location?: string;
+  description?: string;
+  attendees?: Array<{ email: string }>;
 };
 
 type ListCalendarEventsResponse = {
@@ -71,9 +102,37 @@ function buildListCalendarEventsUrl(input: {
   return url.toString();
 }
 
+function buildGetCalendarEventUrl(eventId: string): string {
+  return `${GOOGLE_CALENDAR_API_BASE_URL}/calendars/primary/events/${encodeURIComponent(eventId)}`;
+}
+
+function buildCreateCalendarEventUrl(): string {
+  return `${GOOGLE_CALENDAR_API_BASE_URL}/calendars/primary/events`;
+}
+
 function exclusiveEndToInclusive(exclusiveEnd: string): string {
   const date = new Date(exclusiveEnd + 'T00:00:00Z');
   date.setUTCDate(date.getUTCDate() - 1);
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function isValidCalendarDate(dateStr: string): boolean {
+  const date = new Date(dateStr + 'T00:00:00Z');
+  if (isNaN(date.getTime())) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return (
+    date.getUTCFullYear() === y &&
+    date.getUTCMonth() + 1 === m &&
+    date.getUTCDate() === d
+  );
+}
+
+function inclusiveEndToExclusive(inclusiveEnd: string): string {
+  const date = new Date(inclusiveEnd + 'T00:00:00Z');
+  date.setUTCDate(date.getUTCDate() + 1);
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, '0');
   const d = String(date.getUTCDate()).padStart(2, '0');
@@ -122,6 +181,204 @@ function formatCalendarEvents(events: CalendarEvent[]): string {
   return `Calendar events:\n${lines.join('\n')}`;
 }
 
+function formatEventDetail(event: DetailedCalendarEvent): string {
+  const summary = event.summary?.trim() || 'Untitled event';
+  const lines = [`Event: ${summary}`, `When: ${formatEventDateRange(event)}`];
+  const location = event.location?.trim();
+  const description = event.description?.trim();
+  const attendeeEmails =
+    event.attendees
+      ?.map((attendee) => attendee.email?.trim())
+      .filter((email): email is string => Boolean(email)) ?? [];
+  const status = event.status?.trim();
+  const htmlLink = event.htmlLink?.trim();
+
+  if (location) {
+    lines.push(`Location: ${location}`);
+  }
+
+  if (description) {
+    lines.push(`Description: ${description}`);
+  }
+
+  if (attendeeEmails.length > 0) {
+    lines.push(`Attendees: ${attendeeEmails.join(', ')}`);
+  }
+
+  if (status) {
+    lines.push(`Status: ${status}`);
+  }
+
+  if (htmlLink) {
+    lines.push(`Link: ${htmlLink}`);
+  }
+
+  return lines.join('\n');
+}
+
+function buildEventRequestBody(
+  input: CreateCalendarEventInput,
+): CreateCalendarEventRequestBody {
+  const body: CreateCalendarEventRequestBody = {
+    summary: input.summary.trim(),
+    start: input.startDateTime
+      ? { dateTime: input.startDateTime }
+      : { date: input.startDate! },
+    end: input.endDateTime
+      ? { dateTime: input.endDateTime }
+      : {
+          date: inclusiveEndToExclusive(input.endDate ?? input.startDate!),
+        },
+  };
+
+  const location = input.location?.trim();
+  const description = input.description?.trim();
+  const attendees =
+    input.attendees
+      ?.map((email) => email.trim())
+      .filter((email) => email.length > 0)
+      .map((email) => ({ email })) ?? [];
+
+  if (location) {
+    body.location = location;
+  }
+
+  if (description) {
+    body.description = description;
+  }
+
+  if (attendees.length > 0) {
+    body.attendees = attendees;
+  }
+
+  return body;
+}
+
+const createCalendarEventSchema = z
+  .object({
+    summary: z.string().trim().min(1).describe('The event title or summary.'),
+    startDateTime: z
+      .string()
+      .datetime({ offset: true })
+      .optional()
+      .describe('RFC3339 start time for a timed event.'),
+    endDateTime: z
+      .string()
+      .datetime({ offset: true })
+      .optional()
+      .describe('RFC3339 end time for a timed event.'),
+    startDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe('Start date for an all-day event in YYYY-MM-DD format.'),
+    endDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe(
+        'Inclusive end date for an all-day event in YYYY-MM-DD format.',
+      ),
+    location: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Optional event location.'),
+    description: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Optional event description.'),
+    attendees: z
+      .array(z.string().trim().email())
+      .optional()
+      .describe('Optional attendee email addresses.'),
+  })
+  .superRefine((input, ctx) => {
+    const hasTimedInput = Boolean(input.startDateTime || input.endDateTime);
+    const hasAllDayInput = Boolean(input.startDate || input.endDate);
+
+    if (!input.startDateTime && !input.startDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'Provide either startDateTime for a timed event or startDate for an all-day event.',
+        path: ['startDateTime'],
+      });
+    }
+
+    if (hasTimedInput && hasAllDayInput) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'Timed event fields and all-day event fields cannot be combined.',
+        path: ['startDateTime'],
+      });
+    }
+
+    if (input.startDateTime && !input.endDateTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDateTime is required when startDateTime is provided.',
+        path: ['endDateTime'],
+      });
+    }
+
+    if (input.endDateTime && !input.startDateTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'startDateTime is required when endDateTime is provided.',
+        path: ['startDateTime'],
+      });
+    }
+
+    if (input.endDate && !input.startDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'startDate is required when endDate is provided.',
+        path: ['startDate'],
+      });
+    }
+
+    if (input.startDate && !isValidCalendarDate(input.startDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `startDate "${input.startDate}" is not a valid calendar date.`,
+        path: ['startDate'],
+      });
+    }
+
+    if (input.endDate && !isValidCalendarDate(input.endDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `endDate "${input.endDate}" is not a valid calendar date.`,
+        path: ['endDate'],
+      });
+    }
+
+    if (input.startDate && input.endDate && input.endDate < input.startDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDate must not be before startDate.',
+        path: ['endDate'],
+      });
+    }
+
+    if (
+      input.startDateTime &&
+      input.endDateTime &&
+      Date.parse(input.endDateTime) <= Date.parse(input.startDateTime)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDateTime must be after startDateTime.',
+        path: ['endDateTime'],
+      });
+    }
+  });
+
 export const listCalendarEvents = tool(
   async ({ timeMin, timeMax, query }, config) => {
     const accessToken = getAccessToken(config);
@@ -160,4 +417,77 @@ export const listCalendarEvents = tool(
   },
 );
 
-export const calendarTools = [listCalendarEvents];
+export const getCalendarEvent = tool(
+  async ({ eventId }, config) => {
+    const accessToken = getAccessToken(config);
+
+    try {
+      const event = await fetchWithAuth<DetailedCalendarEvent>(
+        buildGetCalendarEventUrl(eventId),
+        {
+          method: 'GET',
+        },
+        accessToken,
+      );
+
+      return formatEventDetail(
+        event ?? {
+          id: eventId,
+        },
+      );
+    } catch (error) {
+      if (error instanceof GoogleApiError && error.status === 404) {
+        return `No event found with ID '${eventId}'.`;
+      }
+
+      throw error;
+    }
+  },
+  {
+    name: 'get_calendar_event',
+    description:
+      "Get the details for a single event from the user's primary Google Calendar.",
+    schema: z.object({
+      eventId: z
+        .string()
+        .trim()
+        .min(1)
+        .describe('The Google Calendar event ID to fetch.'),
+    }),
+  },
+);
+
+export const createCalendarEvent = tool(
+  async (input, config) => {
+    const accessToken = getAccessToken(config);
+    const event = await fetchWithAuth<DetailedCalendarEvent>(
+      buildCreateCalendarEventUrl(),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(buildEventRequestBody(input)),
+      },
+      accessToken,
+    );
+
+    return formatEventDetail(
+      event ?? {
+        id: 'created-event',
+      },
+    );
+  },
+  {
+    name: 'create_calendar_event',
+    description:
+      "Create a timed or all-day event in the user's primary Google Calendar.",
+    schema: createCalendarEventSchema,
+  },
+);
+
+export const calendarTools = [
+  listCalendarEvents,
+  getCalendarEvent,
+  createCalendarEvent,
+];
