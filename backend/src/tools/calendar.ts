@@ -119,6 +119,17 @@ function exclusiveEndToInclusive(exclusiveEnd: string): string {
   return `${y}-${m}-${d}`;
 }
 
+function isValidCalendarDate(dateStr: string): boolean {
+  const date = new Date(dateStr + 'T00:00:00Z');
+  if (isNaN(date.getTime())) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return (
+    date.getUTCFullYear() === y &&
+    date.getUTCMonth() + 1 === m &&
+    date.getUTCDate() === d
+  );
+}
+
 function inclusiveEndToExclusive(inclusiveEnd: string): string {
   const date = new Date(inclusiveEnd + 'T00:00:00Z');
   date.setUTCDate(date.getUTCDate() + 1);
@@ -328,6 +339,42 @@ const createCalendarEventSchema = z
         code: z.ZodIssueCode.custom,
         message: 'startDate is required when endDate is provided.',
         path: ['startDate'],
+      });
+    }
+
+    if (input.startDate && !isValidCalendarDate(input.startDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `startDate "${input.startDate}" is not a valid calendar date.`,
+        path: ['startDate'],
+      });
+    }
+
+    if (input.endDate && !isValidCalendarDate(input.endDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `endDate "${input.endDate}" is not a valid calendar date.`,
+        path: ['endDate'],
+      });
+    }
+
+    if (input.startDate && input.endDate && input.endDate < input.startDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDate must not be before startDate.',
+        path: ['endDate'],
+      });
+    }
+
+    if (
+      input.startDateTime &&
+      input.endDateTime &&
+      Date.parse(input.endDateTime) <= Date.parse(input.startDateTime)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDateTime must be after startDateTime.',
+        path: ['endDateTime'],
       });
     }
   });

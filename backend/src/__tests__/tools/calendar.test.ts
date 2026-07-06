@@ -418,4 +418,95 @@ describe('createCalendarEvent', () => {
       ),
     ).rejects.toThrow('startDate is required when endDate is provided.');
   });
+
+  it('rejects impossible calendar dates', async () => {
+    await expect(
+      createCalendarEvent.invoke(
+        { summary: 'Bad date', startDate: '2026-02-31' },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('startDate "2026-02-31" is not a valid calendar date.');
+
+    await expect(
+      createCalendarEvent.invoke(
+        { summary: 'Bad date', startDate: '2026-06-31' },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('startDate "2026-06-31" is not a valid calendar date.');
+
+    await expect(
+      createCalendarEvent.invoke(
+        {
+          summary: 'Bad end',
+          startDate: '2026-02-10',
+          endDate: '2026-02-30',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('endDate "2026-02-30" is not a valid calendar date.');
+
+    expect(fetchWithAuth).not.toHaveBeenCalled();
+  });
+
+  it('rejects when endDate is before startDate', async () => {
+    await expect(
+      createCalendarEvent.invoke(
+        {
+          summary: 'Backwards',
+          startDate: '2026-02-12',
+          endDate: '2026-02-10',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('endDate must not be before startDate.');
+
+    expect(fetchWithAuth).not.toHaveBeenCalled();
+  });
+
+  it('rejects when endDateTime is not after startDateTime', async () => {
+    await expect(
+      createCalendarEvent.invoke(
+        {
+          summary: 'Backwards',
+          startDateTime: '2026-03-10T10:00:00-05:00',
+          endDateTime: '2026-03-10T09:00:00-05:00',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('endDateTime must be after startDateTime.');
+
+    await expect(
+      createCalendarEvent.invoke(
+        {
+          summary: 'Zero-length',
+          startDateTime: '2026-03-10T10:00:00-05:00',
+          endDateTime: '2026-03-10T10:00:00-05:00',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('endDateTime must be after startDateTime.');
+
+    expect(fetchWithAuth).not.toHaveBeenCalled();
+  });
+
+  it('accepts mixed-offset datetimes when end is chronologically after start', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      id: 'mixed-tz',
+      summary: 'Cross-TZ',
+      status: 'confirmed',
+      start: { dateTime: '2026-03-10T10:00:00+02:00' },
+      end: { dateTime: '2026-03-10T09:30:00+01:00' },
+    });
+
+    await expect(
+      createCalendarEvent.invoke(
+        {
+          summary: 'Cross-TZ',
+          startDateTime: '2026-03-10T10:00:00+02:00',
+          endDateTime: '2026-03-10T09:30:00+01:00',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).resolves.toContain('Event: Cross-TZ');
+  });
 });
