@@ -13,7 +13,11 @@ vi.mock('../../utils/google-api.js', async (importOriginal) => {
   };
 });
 
-import { getCalendarEvent, listCalendarEvents } from '../../tools/calendar.js';
+import {
+  createCalendarEvent,
+  getCalendarEvent,
+  listCalendarEvents,
+} from '../../tools/calendar.js';
 
 afterEach(() => {
   vi.mocked(fetchWithAuth).mockReset();
@@ -206,5 +210,212 @@ describe('getCalendarEvent', () => {
       retryable: false,
       status: 401,
     });
+  });
+});
+
+describe('createCalendarEvent', () => {
+  it('creates a timed event and returns formatted event details', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      id: 'created-1',
+      summary: 'Meeting',
+      location: 'Room 4',
+      description: 'Discuss launch plan.',
+      attendees: [{ email: 'a@b.com' }],
+      status: 'confirmed',
+      htmlLink: 'https://calendar.google.com/calendar/event?eid=created-1',
+      start: { dateTime: '2026-03-10T09:00:00-05:00' },
+      end: { dateTime: '2026-03-10T10:00:00-05:00' },
+    });
+
+    const result = await createCalendarEvent.invoke(
+      {
+        summary: 'Meeting',
+        startDateTime: '2026-03-10T09:00:00-05:00',
+        endDateTime: '2026-03-10T10:00:00-05:00',
+      },
+      {
+        configurable: {
+          access_token: 'calendar-access-token',
+        },
+      },
+    );
+
+    expect(result).toContain('Event: Meeting');
+    expect(result).toContain(
+      'When: 2026-03-10T09:00:00-05:00 to 2026-03-10T10:00:00-05:00',
+    );
+    expect(result).toContain('Location: Room 4');
+    expect(result).toContain('Description: Discuss launch plan.');
+    expect(result).toContain('Attendees: a@b.com');
+    expect(result).toContain('Status: confirmed');
+    expect(result).toContain(
+      'Link: https://calendar.google.com/calendar/event?eid=created-1',
+    );
+    expect(fetchWithAuth).toHaveBeenCalledWith(
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          summary: 'Meeting',
+          start: { dateTime: '2026-03-10T09:00:00-05:00' },
+          end: { dateTime: '2026-03-10T10:00:00-05:00' },
+        }),
+      },
+      'calendar-access-token',
+    );
+  });
+
+  it('creates a single-day all-day event with an exclusive end date', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      id: 'created-2',
+      summary: 'Company Holiday',
+      start: { date: '2026-02-10' },
+      end: { date: '2026-02-11' },
+      status: 'confirmed',
+    });
+
+    await createCalendarEvent.invoke(
+      {
+        summary: 'Company Holiday',
+        startDate: '2026-02-10',
+      },
+      {
+        configurable: {
+          access_token: 'calendar-access-token',
+        },
+      },
+    );
+
+    expect(fetchWithAuth).toHaveBeenCalledWith(
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          summary: 'Company Holiday',
+          start: { date: '2026-02-10' },
+          end: { date: '2026-02-11' },
+        }),
+      }),
+      'calendar-access-token',
+    );
+  });
+
+  it('creates a multi-day all-day event with attendees and optional fields', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      id: 'created-3',
+      summary: 'Offsite',
+      location: 'Detroit',
+      description: 'Planning and team building.',
+      attendees: [{ email: 'a@b.com' }],
+      status: 'confirmed',
+      start: { date: '2026-02-10' },
+      end: { date: '2026-02-13' },
+    });
+
+    const result = await createCalendarEvent.invoke(
+      {
+        summary: 'Offsite',
+        startDate: '2026-02-10',
+        endDate: '2026-02-12',
+        location: 'Detroit',
+        description: 'Planning and team building.',
+        attendees: ['a@b.com'],
+      },
+      {
+        configurable: {
+          access_token: 'calendar-access-token',
+        },
+      },
+    );
+
+    expect(result).toContain('When: 2026-02-10 to 2026-02-12 (all day)');
+    expect(result).toContain('Location: Detroit');
+    expect(result).toContain('Description: Planning and team building.');
+    expect(result).toContain('Attendees: a@b.com');
+    expect(fetchWithAuth).toHaveBeenCalledWith(
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          summary: 'Offsite',
+          start: { date: '2026-02-10' },
+          end: { date: '2026-02-13' },
+          location: 'Detroit',
+          description: 'Planning and team building.',
+          attendees: [{ email: 'a@b.com' }],
+        }),
+      }),
+      'calendar-access-token',
+    );
+  });
+
+  it('rejects when no timed or all-day start fields are provided', async () => {
+    await expect(
+      createCalendarEvent.invoke(
+        { summary: 'Meeting' },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow(
+      'Provide either startDateTime for a timed event or startDate for an all-day event.',
+    );
+  });
+
+  it('rejects when timed and all-day fields are mixed', async () => {
+    await expect(
+      createCalendarEvent.invoke(
+        {
+          summary: 'Meeting',
+          startDateTime: '2026-03-10T09:00:00-05:00',
+          endDateTime: '2026-03-10T10:00:00-05:00',
+          startDate: '2026-03-10',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow(
+      'Timed event fields and all-day event fields cannot be combined.',
+    );
+  });
+
+  it('rejects when startDateTime is provided without endDateTime', async () => {
+    await expect(
+      createCalendarEvent.invoke(
+        {
+          summary: 'Meeting',
+          startDateTime: '2026-03-10T09:00:00-05:00',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow(
+      'endDateTime is required when startDateTime is provided.',
+    );
+  });
+
+  it('rejects when endDateTime is provided without startDateTime', async () => {
+    await expect(
+      createCalendarEvent.invoke(
+        {
+          summary: 'Meeting',
+          endDateTime: '2026-03-10T10:00:00-05:00',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow(
+      'startDateTime is required when endDateTime is provided.',
+    );
+  });
+
+  it('rejects when endDate is provided without startDate', async () => {
+    await expect(
+      createCalendarEvent.invoke(
+        {
+          summary: 'Offsite',
+          endDate: '2026-02-12',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('startDate is required when endDate is provided.');
   });
 });

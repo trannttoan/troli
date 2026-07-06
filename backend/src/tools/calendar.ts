@@ -31,6 +31,26 @@ type DetailedCalendarEvent = CalendarEvent & {
   htmlLink?: string;
 };
 
+type CreateCalendarEventInput = {
+  summary: string;
+  startDateTime?: string;
+  endDateTime?: string;
+  startDate?: string;
+  endDate?: string;
+  location?: string;
+  description?: string;
+  attendees?: string[];
+};
+
+type CreateCalendarEventRequestBody = {
+  summary: string;
+  start: CalendarEventDateTime;
+  end: CalendarEventDateTime;
+  location?: string;
+  description?: string;
+  attendees?: Array<{ email: string }>;
+};
+
 type ListCalendarEventsResponse = {
   items?: CalendarEvent[];
 };
@@ -86,9 +106,22 @@ function buildGetCalendarEventUrl(eventId: string): string {
   return `${GOOGLE_CALENDAR_API_BASE_URL}/calendars/primary/events/${encodeURIComponent(eventId)}`;
 }
 
+function buildCreateCalendarEventUrl(): string {
+  return `${GOOGLE_CALENDAR_API_BASE_URL}/calendars/primary/events`;
+}
+
 function exclusiveEndToInclusive(exclusiveEnd: string): string {
   const date = new Date(exclusiveEnd + 'T00:00:00Z');
   date.setUTCDate(date.getUTCDate() - 1);
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function inclusiveEndToExclusive(inclusiveEnd: string): string {
+  const date = new Date(inclusiveEnd + 'T00:00:00Z');
+  date.setUTCDate(date.getUTCDate() + 1);
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, '0');
   const d = String(date.getUTCDate()).padStart(2, '0');
@@ -172,6 +205,133 @@ function formatEventDetail(event: DetailedCalendarEvent): string {
   return lines.join('\n');
 }
 
+function buildEventRequestBody(
+  input: CreateCalendarEventInput,
+): CreateCalendarEventRequestBody {
+  const body: CreateCalendarEventRequestBody = {
+    summary: input.summary.trim(),
+    start: input.startDateTime
+      ? { dateTime: input.startDateTime }
+      : { date: input.startDate! },
+    end: input.endDateTime
+      ? { dateTime: input.endDateTime }
+      : {
+          date: inclusiveEndToExclusive(input.endDate ?? input.startDate!),
+        },
+  };
+
+  const location = input.location?.trim();
+  const description = input.description?.trim();
+  const attendees =
+    input.attendees
+      ?.map((email) => email.trim())
+      .filter((email) => email.length > 0)
+      .map((email) => ({ email })) ?? [];
+
+  if (location) {
+    body.location = location;
+  }
+
+  if (description) {
+    body.description = description;
+  }
+
+  if (attendees.length > 0) {
+    body.attendees = attendees;
+  }
+
+  return body;
+}
+
+const createCalendarEventSchema = z
+  .object({
+    summary: z.string().trim().min(1).describe('The event title or summary.'),
+    startDateTime: z
+      .string()
+      .datetime({ offset: true })
+      .optional()
+      .describe('RFC3339 start time for a timed event.'),
+    endDateTime: z
+      .string()
+      .datetime({ offset: true })
+      .optional()
+      .describe('RFC3339 end time for a timed event.'),
+    startDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe('Start date for an all-day event in YYYY-MM-DD format.'),
+    endDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe(
+        'Inclusive end date for an all-day event in YYYY-MM-DD format.',
+      ),
+    location: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Optional event location.'),
+    description: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Optional event description.'),
+    attendees: z
+      .array(z.string().trim().email())
+      .optional()
+      .describe('Optional attendee email addresses.'),
+  })
+  .superRefine((input, ctx) => {
+    const hasTimedInput = Boolean(input.startDateTime || input.endDateTime);
+    const hasAllDayInput = Boolean(input.startDate || input.endDate);
+
+    if (!input.startDateTime && !input.startDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'Provide either startDateTime for a timed event or startDate for an all-day event.',
+        path: ['startDateTime'],
+      });
+    }
+
+    if (hasTimedInput && hasAllDayInput) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'Timed event fields and all-day event fields cannot be combined.',
+        path: ['startDateTime'],
+      });
+    }
+
+    if (input.startDateTime && !input.endDateTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDateTime is required when startDateTime is provided.',
+        path: ['endDateTime'],
+      });
+    }
+
+    if (input.endDateTime && !input.startDateTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'startDateTime is required when endDateTime is provided.',
+        path: ['startDateTime'],
+      });
+    }
+
+    if (input.endDate && !input.startDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'startDate is required when endDate is provided.',
+        path: ['startDate'],
+      });
+    }
+  });
+
 export const listCalendarEvents = tool(
   async ({ timeMin, timeMax, query }, config) => {
     const accessToken = getAccessToken(config);
@@ -250,4 +410,37 @@ export const getCalendarEvent = tool(
   },
 );
 
-export const calendarTools = [listCalendarEvents, getCalendarEvent];
+export const createCalendarEvent = tool(
+  async (input, config) => {
+    const accessToken = getAccessToken(config);
+    const event = await fetchWithAuth<DetailedCalendarEvent>(
+      buildCreateCalendarEventUrl(),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(buildEventRequestBody(input)),
+      },
+      accessToken,
+    );
+
+    return formatEventDetail(
+      event ?? {
+        id: 'created-event',
+      },
+    );
+  },
+  {
+    name: 'create_calendar_event',
+    description:
+      "Create a timed or all-day event in the user's primary Google Calendar.",
+    schema: createCalendarEventSchema,
+  },
+);
+
+export const calendarTools = [
+  listCalendarEvents,
+  getCalendarEvent,
+  createCalendarEvent,
+];
