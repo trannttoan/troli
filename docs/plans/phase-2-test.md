@@ -101,9 +101,51 @@ These verify the state channel refactor didn't break existing functionality.
 
 ---
 
+## H. Get Event Detail
+
+| #   | Scenario                     | Steps                                                                                               | Expected                                                                                                                                          | Status |
+| --- | ---------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| H1  | Get event by follow-up       | 1. Send: "What's on my calendar today?" 2. After listing, send: "Tell me more about the first one." | Agent calls `get_calendar_event` with the correct event ID from the list results. Returns detailed view with summary, time, and any extra fields. | TODO   |
+| H2  | Event with all detail fields | Have an event with location, description, and attendees. Ask for details on it.                     | Output includes: Event title, When, Location, Description, Attendees (comma-separated emails), Status, and Link.                                  | TODO   |
+| H3  | Event with minimal fields    | Have an event with only a title and time (no location, description, attendees). Get details.        | Shows title and time. No "undefined", "null", or blank lines for missing fields.                                                                  | TODO   |
+| H4  | Non-existent event ID        | Agent attempts to fetch an event that was deleted or has an invalid ID.                             | Returns "No event found with ID '...'" message. No crash, no raw error JSON.                                                                      | TODO   |
+| H5  | All-day event detail         | Have an all-day event. Get its details.                                                             | "When" field shows date(s) with "(all day)" notation, not raw exclusive end date.                                                                 | TODO   |
+
+---
+
+## I. Create Calendar Event
+
+| #   | Scenario                             | Steps                                                                                                          | Expected                                                                                                                                           | Status |
+| --- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| I1  | Create timed event                   | Send: "Create a meeting called 'Team Standup' tomorrow at 10am to 10:30am"                                     | Agent calls `create_calendar_event` with summary, startDateTime, endDateTime. Returns created event details. Event appears in Google Calendar.     | TODO   |
+| I2  | Create all-day event                 | Send: "Create an all-day event called 'Company Holiday' on July 15"                                            | Agent uses startDate (YYYY-MM-DD). Event appears as all-day in Google Calendar. Returned detail shows "(all day)".                                 | TODO   |
+| I3  | Create multi-day all-day event       | Send: "Create a vacation event from July 20 to July 23"                                                        | Agent uses startDate and endDate. Google Calendar shows the event spanning all 4 days (inclusive end converted to exclusive for API).              | TODO   |
+| I4  | Create event with location           | Send: "Create a lunch meeting at Cafe Central tomorrow at noon to 1pm"                                         | Created event includes location "Cafe Central". Returned detail shows "Location: Cafe Central".                                                    | TODO   |
+| I5  | Create event with attendees          | Send: "Create a meeting called 'Design Review' tomorrow 2-3pm with alice@example.com and bob@example.com"      | Created event includes attendees. Returned detail shows "Attendees: alice@example.com, bob@example.com".                                           | TODO   |
+| I6  | Create event with description        | Send: "Create a meeting called 'Sprint Planning' tomorrow 9-10am. Description: Discuss Q3 roadmap priorities." | Created event includes description. Returned detail shows the description.                                                                         | TODO   |
+| I7  | Agent asks for missing required info | Send: "Create a meeting" (no title, no time)                                                                   | Agent asks for at least a title and time before calling the tool. Does NOT call create with empty/default values.                                  | TODO   |
+| I8  | Verify event in Google Calendar      | After any successful create, open Google Calendar (web or app).                                                | The created event appears at the correct time with all specified fields. Confirms the API call actually succeeded, not just a fabricated response. | TODO   |
+| I9  | Create event then list to confirm    | 1. Create an event for today. 2. Send: "What's on my calendar today?"                                          | The newly created event appears in the list results.                                                                                               | TODO   |
+
+---
+
+## J. Create Event -- Validation & Edge Cases
+
+| #   | Scenario                            | Steps                                                                        | Expected                                                                                                                                             | Status |
+| --- | ----------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| J1  | End before start (timed)            | Agent attempts to create an event where endDateTime is before startDateTime. | Validation rejects: "endDateTime must be after startDateTime." No event created.                                                                     | TODO   |
+| J2  | End before start (all-day)          | Agent attempts to create an event where endDate is before startDate.         | Validation rejects: "endDate must not be before startDate." No event created.                                                                        | TODO   |
+| J3  | Mixed date and dateTime             | Agent attempts to provide both startDateTime and startDate.                  | Validation rejects: "Timed event fields and all-day event fields cannot be combined." No event created.                                              | TODO   |
+| J4  | startDateTime without endDateTime   | Agent attempts to provide startDateTime but omits endDateTime.               | Validation rejects: "endDateTime is required when startDateTime is provided."                                                                        | TODO   |
+| J5  | endDate without startDate           | Agent attempts to provide endDate but omits startDate.                       | Validation rejects: "startDate is required when endDate is provided."                                                                                | TODO   |
+| J6  | Invalid calendar date (e.g. Feb 30) | Agent attempts to use startDate "2026-02-30".                                | Validation rejects with invalid date message. No event created.                                                                                      | TODO   |
+| J7  | Single-day all-day (no endDate)     | Send: "Create an all-day event called 'Focus Day' on July 10"                | Agent provides only startDate, no endDate. Tool defaults endDate to same day (exclusive end = startDate + 1). Event appears as single all-day event. | TODO   |
+| J8  | Hydration after create turn         | 1. Create an event. 2. Kill app. 3. Reopen.                                  | Messages hydrate correctly. The create turn shows the assistant's final text, not raw tool call/result JSON.                                         | TODO   |
+
+---
+
 ## Extending This Plan
 
-- **Slice 2 (get/create):** Add sections for single-event detail retrieval, event creation (timed, all-day, with attendees), and input validation (mixed date/dateTime rejection).
 - **Slice 3 (HITL update):** Add approval card rendering, approve/reject flows, interrupted thread detection, input disable during pending approval.
 - **Slice 4 (delete + reopen hydration):** Add delete approval flow, app reopen with pending interrupt, duplicate approval card dedup.
 
