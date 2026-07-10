@@ -1,5 +1,5 @@
 import { tool } from '@langchain/core/tools';
-import { LangGraphRunnableConfig } from '@langchain/langgraph';
+import { interrupt, LangGraphRunnableConfig } from '@langchain/langgraph';
 import { z } from 'zod';
 
 import { TroliAuthError } from '../utils/auth.js';
@@ -27,6 +27,7 @@ type CalendarEventAttendee = {
 type DetailedCalendarEvent = CalendarEvent & {
   description?: string;
   attendees?: CalendarEventAttendee[];
+  recurringEventId?: string;
   status?: string;
   htmlLink?: string;
 };
@@ -42,10 +43,32 @@ type CreateCalendarEventInput = {
   attendees?: string[];
 };
 
+type UpdateCalendarEventInput = {
+  eventId: string;
+  recurringEventScope?: 'single' | 'all';
+  summary?: string;
+  startDateTime?: string;
+  endDateTime?: string;
+  startDate?: string;
+  endDate?: string;
+  location?: string;
+  description?: string;
+  attendees?: string[];
+};
+
 type CreateCalendarEventRequestBody = {
   summary: string;
   start: CalendarEventDateTime;
   end: CalendarEventDateTime;
+  location?: string;
+  description?: string;
+  attendees?: Array<{ email: string }>;
+};
+
+type UpdateCalendarEventRequestBody = {
+  summary?: string;
+  start?: CalendarEventDateTime;
+  end?: CalendarEventDateTime;
   location?: string;
   description?: string;
   attendees?: Array<{ email: string }>;
@@ -108,6 +131,10 @@ function buildGetCalendarEventUrl(eventId: string): string {
 
 function buildCreateCalendarEventUrl(): string {
   return `${GOOGLE_CALENDAR_API_BASE_URL}/calendars/primary/events`;
+}
+
+function buildUpdateCalendarEventUrl(eventId: string): string {
+  return `${GOOGLE_CALENDAR_API_BASE_URL}/calendars/primary/events/${encodeURIComponent(eventId)}`;
 }
 
 function exclusiveEndToInclusive(exclusiveEnd: string): string {
@@ -254,6 +281,175 @@ function buildEventRequestBody(
   return body;
 }
 
+function buildUpdateEventRequestBody(
+  input: UpdateCalendarEventInput,
+): UpdateCalendarEventRequestBody {
+  const body: UpdateCalendarEventRequestBody = {};
+  const summary = input.summary?.trim();
+  const location = input.location?.trim();
+  const description = input.description?.trim();
+
+  if (summary) {
+    body.summary = summary;
+  }
+
+  if (input.startDateTime) {
+    body.start = { dateTime: input.startDateTime };
+  } else if (input.startDate) {
+    body.start = { date: input.startDate };
+  }
+
+  if (input.endDateTime) {
+    body.end = { dateTime: input.endDateTime };
+  } else if (input.endDate) {
+    body.end = { date: inclusiveEndToExclusive(input.endDate) };
+  }
+
+  if (location) {
+    body.location = location;
+  }
+
+  if (description) {
+    body.description = description;
+  }
+
+  if (input.attendees !== undefined) {
+    body.attendees = input.attendees
+      .map((email) => email.trim())
+      .filter((email) => email.length > 0)
+      .map((email) => ({ email }));
+  }
+
+  return body;
+}
+
+function toEventSnapshot(event: DetailedCalendarEvent): {
+  eventId: string;
+  recurringEventId?: string;
+  summary?: string;
+  startDateTime?: string;
+  endDateTime?: string;
+  startDate?: string;
+  endDate?: string;
+  location?: string;
+  description?: string;
+  attendees?: string[];
+} {
+  const attendeeEmails =
+    event.attendees
+      ?.map((attendee) => attendee.email?.trim())
+      .filter((email): email is string => Boolean(email)) ?? [];
+
+  return {
+    eventId: event.id,
+    recurringEventId: event.recurringEventId,
+    summary: event.summary?.trim(),
+    startDateTime: event.start?.dateTime,
+    endDateTime: event.end?.dateTime,
+    startDate: event.start?.date,
+    endDate:
+      event.start?.date && event.end?.date
+        ? exclusiveEndToInclusive(event.end.date)
+        : undefined,
+    location: event.location?.trim(),
+    description: event.description?.trim(),
+    attendees: attendeeEmails.length > 0 ? attendeeEmails : undefined,
+  };
+}
+
+function toProposedUpdateSnapshot(
+  input: UpdateCalendarEventInput,
+): Omit<ReturnType<typeof toEventSnapshot>, 'eventId' | 'recurringEventId'> {
+  const proposed: Omit<
+    ReturnType<typeof toEventSnapshot>,
+    'eventId' | 'recurringEventId'
+  > = {};
+
+  if (input.summary) {
+    proposed.summary = input.summary.trim();
+  }
+
+  if (input.startDateTime) {
+    proposed.startDateTime = input.startDateTime;
+  }
+
+  if (input.endDateTime) {
+    proposed.endDateTime = input.endDateTime;
+  }
+
+  if (input.startDate) {
+    proposed.startDate = input.startDate;
+  }
+
+  if (input.endDate) {
+    proposed.endDate = input.endDate;
+  }
+
+  if (input.location) {
+    proposed.location = input.location.trim();
+  }
+
+  if (input.description) {
+    proposed.description = input.description.trim();
+  }
+
+  if (input.attendees !== undefined) {
+    proposed.attendees = input.attendees
+      .map((email) => email.trim())
+      .filter((email) => email.length > 0);
+  }
+
+  return proposed;
+}
+
+function buildUpdateDescription(
+  currentEvent: DetailedCalendarEvent,
+  proposed: ReturnType<typeof toProposedUpdateSnapshot>,
+): string {
+  const currentSummary = currentEvent.summary?.trim() || 'Untitled event';
+  const changes: string[] = [];
+
+  if (proposed.summary) {
+    changes.push(`summary → "${proposed.summary}"`);
+  }
+
+  if (proposed.startDateTime) {
+    changes.push(`start → ${proposed.startDateTime}`);
+  }
+
+  if (proposed.endDateTime) {
+    changes.push(`end → ${proposed.endDateTime}`);
+  }
+
+  if (proposed.startDate) {
+    changes.push(`start date → ${proposed.startDate}`);
+  }
+
+  if (proposed.endDate) {
+    changes.push(`end date → ${proposed.endDate}`);
+  }
+
+  if (proposed.location) {
+    changes.push(`location → "${proposed.location}"`);
+  }
+
+  if (proposed.description) {
+    changes.push('description updated');
+  }
+
+  if (proposed.attendees) {
+    changes.push(
+      proposed.attendees.length > 0
+        ? `attendees → ${proposed.attendees.join(', ')}`
+        : 'attendees cleared',
+    );
+  }
+
+  return changes.length > 0
+    ? `Update "${currentSummary}": ${changes.join(', ')}`
+    : `Update "${currentSummary}".`;
+}
+
 const createCalendarEventSchema = z
   .object({
     summary: z.string().trim().min(1).describe('The event title or summary.'),
@@ -339,6 +535,133 @@ const createCalendarEventSchema = z
         code: z.ZodIssueCode.custom,
         message: 'startDate is required when endDate is provided.',
         path: ['startDate'],
+      });
+    }
+
+    if (input.startDate && !isValidCalendarDate(input.startDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `startDate "${input.startDate}" is not a valid calendar date.`,
+        path: ['startDate'],
+      });
+    }
+
+    if (input.endDate && !isValidCalendarDate(input.endDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `endDate "${input.endDate}" is not a valid calendar date.`,
+        path: ['endDate'],
+      });
+    }
+
+    if (input.startDate && input.endDate && input.endDate < input.startDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDate must not be before startDate.',
+        path: ['endDate'],
+      });
+    }
+
+    if (
+      input.startDateTime &&
+      input.endDateTime &&
+      Date.parse(input.endDateTime) <= Date.parse(input.startDateTime)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDateTime must be after startDateTime.',
+        path: ['endDateTime'],
+      });
+    }
+  });
+
+const updateCalendarEventSchema = z
+  .object({
+    eventId: z
+      .string()
+      .trim()
+      .min(1)
+      .describe('The Google Calendar event ID to update.'),
+    recurringEventScope: z
+      .enum(['single', 'all'])
+      .optional()
+      .describe(
+        'For recurring events, update only this instance or the whole series.',
+      ),
+    summary: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Updated event title or summary.'),
+    startDateTime: z
+      .string()
+      .datetime({ offset: true })
+      .optional()
+      .describe('Updated RFC3339 start time for a timed event.'),
+    endDateTime: z
+      .string()
+      .datetime({ offset: true })
+      .optional()
+      .describe('Updated RFC3339 end time for a timed event.'),
+    startDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe(
+        'Updated start date for an all-day event in YYYY-MM-DD format.',
+      ),
+    endDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe(
+        'Updated inclusive end date for an all-day event in YYYY-MM-DD format.',
+      ),
+    location: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Updated event location.'),
+    description: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Updated event description.'),
+    attendees: z
+      .array(z.string().trim().email())
+      .optional()
+      .describe('Updated attendee email addresses.'),
+  })
+  .superRefine((input, ctx) => {
+    const hasTimedInput = Boolean(input.startDateTime || input.endDateTime);
+    const hasAllDayInput = Boolean(input.startDate || input.endDate);
+    const hasUpdateFields =
+      input.summary !== undefined ||
+      input.startDateTime !== undefined ||
+      input.endDateTime !== undefined ||
+      input.startDate !== undefined ||
+      input.endDate !== undefined ||
+      input.location !== undefined ||
+      input.description !== undefined ||
+      input.attendees !== undefined;
+
+    if (!hasUpdateFields) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide at least one field to update.',
+        path: ['eventId'],
+      });
+    }
+
+    if (hasTimedInput && hasAllDayInput) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'Timed event fields and all-day event fields cannot be combined.',
+        path: ['startDateTime'],
       });
     }
 
@@ -486,8 +809,81 @@ export const createCalendarEvent = tool(
   },
 );
 
+export const updateCalendarEvent = tool(
+  async (input, config) => {
+    const accessToken = getAccessToken(config);
+
+    let currentEvent: DetailedCalendarEvent;
+
+    try {
+      currentEvent = (await fetchWithAuth<DetailedCalendarEvent>(
+        buildGetCalendarEventUrl(input.eventId),
+        {
+          method: 'GET',
+        },
+        accessToken,
+      )) ?? { id: input.eventId };
+    } catch (error) {
+      if (error instanceof GoogleApiError && error.status === 404) {
+        return `No event found with ID '${input.eventId}'.`;
+      }
+
+      throw error;
+    }
+
+    const proposed = toProposedUpdateSnapshot(input);
+    const decision = interrupt<
+      {
+        action: 'update_calendar_event';
+        description: string;
+        current: ReturnType<typeof toEventSnapshot>;
+        proposed: typeof proposed;
+      },
+      'approve' | 'reject'
+    >({
+      action: 'update_calendar_event',
+      description: buildUpdateDescription(currentEvent, proposed),
+      current: toEventSnapshot(currentEvent),
+      proposed,
+    });
+
+    if (decision !== 'approve') {
+      return 'Update cancelled.';
+    }
+
+    const targetEventId =
+      input.recurringEventScope === 'all' && currentEvent.recurringEventId
+        ? currentEvent.recurringEventId
+        : input.eventId;
+    const event = await fetchWithAuth<DetailedCalendarEvent>(
+      buildUpdateCalendarEventUrl(targetEventId),
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(buildUpdateEventRequestBody(input)),
+      },
+      accessToken,
+    );
+
+    return formatEventDetail(
+      event ?? {
+        id: targetEventId,
+      },
+    );
+  },
+  {
+    name: 'update_calendar_event',
+    description:
+      "Update an existing event in the user's primary Google Calendar. Requires user approval.",
+    schema: updateCalendarEventSchema,
+  },
+);
+
 export const calendarTools = [
   listCalendarEvents,
   getCalendarEvent,
   createCalendarEvent,
+  updateCalendarEvent,
 ];
