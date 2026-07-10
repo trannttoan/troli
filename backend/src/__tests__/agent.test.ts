@@ -1,4 +1,10 @@
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
+import {
+  Command,
+  INTERRUPT,
+  MemorySaver,
+  isInterrupted,
+} from '@langchain/langgraph';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TroliAuthError } from '../utils/auth.js';
@@ -41,7 +47,7 @@ vi.mock('../utils/google-api.js', async (importOriginal) => {
   };
 });
 
-import { graph } from '../agent.js';
+import { graph, workflow } from '../agent.js';
 import {
   validateGoogleToken,
   verifyThreadAuthorization,
@@ -344,6 +350,115 @@ describe('agent graph', () => {
       expect(result.messages[result.messages.length - 1]?.content).toBe(
         'You have one event tomorrow: Team Sync at 9:00 AM.',
       );
+    });
+
+    it('interrupts on update_calendar_event and resumes with approval', async () => {
+      const interruptibleGraph = workflow.compile({
+        checkpointer: new MemorySaver(),
+      });
+
+      modelInvokeSpy
+        .mockResolvedValueOnce(
+          new AIMessage({
+            content: '',
+            tool_calls: [
+              {
+                id: 'tool-call-1',
+                name: 'update_calendar_event',
+                args: {
+                  eventId: 'event-1',
+                  summary: 'Team Standup',
+                },
+                type: 'tool_call',
+              },
+            ],
+          }),
+        )
+        .mockResolvedValueOnce(
+          new AIMessage('I updated the event to Team Standup.'),
+        );
+      vi.mocked(fetchWithAuth)
+        .mockResolvedValueOnce({
+          id: 'event-1',
+          summary: 'Team Sync',
+          location: 'Room 1',
+          description: 'Weekly sync.',
+          attendees: [{ email: 'lead@example.com' }],
+          start: { dateTime: '2026-03-10T09:00:00-05:00' },
+          end: { dateTime: '2026-03-10T09:30:00-05:00' },
+        })
+        .mockResolvedValueOnce({
+          id: 'event-1',
+          summary: 'Team Sync',
+          location: 'Room 1',
+          description: 'Weekly sync.',
+          attendees: [{ email: 'lead@example.com' }],
+          start: { dateTime: '2026-03-10T09:00:00-05:00' },
+          end: { dateTime: '2026-03-10T09:30:00-05:00' },
+        })
+        .mockResolvedValueOnce({
+          id: 'event-1',
+          summary: 'Team Standup',
+          location: 'Room 1',
+          description: 'Weekly sync.',
+          attendees: [{ email: 'lead@example.com' }],
+          status: 'confirmed',
+          start: { dateTime: '2026-03-10T09:00:00-05:00' },
+          end: { dateTime: '2026-03-10T09:30:00-05:00' },
+        });
+
+      const interruptedResult = await interruptibleGraph.invoke(
+        {
+          messages: [new HumanMessage('Rename Team Sync to Team Standup.')],
+        },
+        buildConfig(),
+      );
+
+      expect(isInterrupted(interruptedResult)).toBe(true);
+      expect(interruptedResult[INTERRUPT][0]?.value).toEqual({
+        action: 'update_calendar_event',
+        description: 'Update "Team Sync": summary → "Team Standup"',
+        current: {
+          eventId: 'event-1',
+          recurringEventId: undefined,
+          summary: 'Team Sync',
+          startDateTime: '2026-03-10T09:00:00-05:00',
+          endDateTime: '2026-03-10T09:30:00-05:00',
+          startDate: undefined,
+          endDate: undefined,
+          location: 'Room 1',
+          description: 'Weekly sync.',
+          attendees: ['lead@example.com'],
+        },
+        proposed: {
+          summary: 'Team Standup',
+        },
+      });
+
+      const resumedResult = await interruptibleGraph.invoke(
+        new Command({ resume: 'approve' }),
+        buildConfig(),
+      );
+
+      expect(isInterrupted(resumedResult)).toBe(false);
+      expect(fetchWithAuth).toHaveBeenNthCalledWith(
+        3,
+        'https://www.googleapis.com/calendar/v3/calendars/primary/events/event-1',
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            summary: 'Team Standup',
+          }),
+        },
+        'test-access-token',
+      );
+      expect(modelInvokeSpy).toHaveBeenCalledTimes(2);
+      expect(
+        resumedResult.messages[resumedResult.messages.length - 1]?.content,
+      ).toBe('I updated the event to Team Standup.');
     });
   });
 });

@@ -96,7 +96,7 @@ async function toolsNode(
   };
 }
 
-const workflow = new StateGraph(AgentState)
+export const workflow = new StateGraph(AgentState)
   .addNode('preprocess', preprocessNode)
   .addNode('agent', async (state, config) => {
     const response = await getModel()
