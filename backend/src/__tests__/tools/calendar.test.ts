@@ -1,7 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { interrupt } from '@langchain/langgraph';
 
 import { TroliAuthError } from '../../utils/auth.js';
 import { fetchWithAuth, GoogleApiError } from '../../utils/google-api.js';
+
+vi.mock('@langchain/langgraph', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@langchain/langgraph')>();
+
+  return {
+    ...actual,
+    interrupt: vi.fn(),
+  };
+});
 
 vi.mock('../../utils/google-api.js', async (importOriginal) => {
   const actual =
@@ -17,10 +27,12 @@ import {
   createCalendarEvent,
   getCalendarEvent,
   listCalendarEvents,
+  updateCalendarEvent,
 } from '../../tools/calendar.js';
 
 afterEach(() => {
   vi.mocked(fetchWithAuth).mockReset();
+  vi.mocked(interrupt).mockReset();
 });
 
 describe('listCalendarEvents', () => {
@@ -508,5 +520,302 @@ describe('createCalendarEvent', () => {
         { configurable: { access_token: 'calendar-access-token' } },
       ),
     ).resolves.toContain('Event: Cross-TZ');
+  });
+});
+
+describe('updateCalendarEvent', () => {
+  it('interrupts for approval, patches the event, and returns formatted event details', async () => {
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({
+        id: 'event-1',
+        summary: 'Team Sync',
+        location: 'Room 1',
+        description: 'Weekly sync.',
+        attendees: [{ email: 'lead@example.com' }],
+        start: { dateTime: '2026-03-10T09:00:00-05:00' },
+        end: { dateTime: '2026-03-10T09:30:00-05:00' },
+      })
+      .mockResolvedValueOnce({
+        id: 'event-1',
+        summary: 'Team Standup',
+        location: 'Room 1',
+        description: 'Weekly sync.',
+        attendees: [{ email: 'lead@example.com' }],
+        status: 'confirmed',
+        start: { dateTime: '2026-03-10T09:00:00-05:00' },
+        end: { dateTime: '2026-03-10T09:30:00-05:00' },
+      });
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    const result = await updateCalendarEvent.invoke(
+      {
+        eventId: 'event-1',
+        summary: 'Team Standup',
+      },
+      {
+        configurable: {
+          access_token: 'calendar-access-token',
+        },
+      },
+    );
+
+    expect(interrupt).toHaveBeenCalledWith({
+      action: 'update_calendar_event',
+      description: 'Update "Team Sync": summary → "Team Standup"',
+      current: {
+        eventId: 'event-1',
+        recurringEventId: undefined,
+        summary: 'Team Sync',
+        startDateTime: '2026-03-10T09:00:00-05:00',
+        endDateTime: '2026-03-10T09:30:00-05:00',
+        startDate: undefined,
+        endDate: undefined,
+        location: 'Room 1',
+        description: 'Weekly sync.',
+        attendees: ['lead@example.com'],
+      },
+      proposed: {
+        summary: 'Team Standup',
+      },
+    });
+    expect(fetchWithAuth).toHaveBeenNthCalledWith(
+      1,
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/event-1',
+      expect.objectContaining({ method: 'GET' }),
+      'calendar-access-token',
+    );
+    expect(fetchWithAuth).toHaveBeenNthCalledWith(
+      2,
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/event-1',
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          summary: 'Team Standup',
+        }),
+      },
+      'calendar-access-token',
+    );
+    expect(result).toContain('Event: Team Standup');
+    expect(result).toContain(
+      'When: 2026-03-10T09:00:00-05:00 to 2026-03-10T09:30:00-05:00',
+    );
+    expect(result).toContain('Status: confirmed');
+  });
+
+  it('returns a cancellation message when the update is rejected', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      id: 'event-2',
+      summary: 'Planning',
+      start: { date: '2026-04-01' },
+      end: { date: '2026-04-02' },
+    });
+    vi.mocked(interrupt).mockReturnValue('reject');
+
+    await expect(
+      updateCalendarEvent.invoke(
+        {
+          eventId: 'event-2',
+          summary: 'Quarterly Planning',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe('Update cancelled.');
+
+    expect(fetchWithAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses recurringEventId when updating the full recurring series', async () => {
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({
+        id: 'instance-1',
+        recurringEventId: 'series-1',
+        summary: '1:1',
+        start: { dateTime: '2026-05-01T10:00:00-04:00' },
+        end: { dateTime: '2026-05-01T10:30:00-04:00' },
+      })
+      .mockResolvedValueOnce({
+        id: 'series-1',
+        summary: 'Manager 1:1',
+        start: { dateTime: '2026-05-01T10:00:00-04:00' },
+        end: { dateTime: '2026-05-01T10:30:00-04:00' },
+      });
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    await updateCalendarEvent.invoke(
+      {
+        eventId: 'instance-1',
+        recurringEventScope: 'all',
+        summary: 'Manager 1:1',
+      },
+      {
+        configurable: {
+          access_token: 'calendar-access-token',
+        },
+      },
+    );
+
+    expect(fetchWithAuth).toHaveBeenNthCalledWith(
+      2,
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/series-1',
+      expect.objectContaining({ method: 'PATCH' }),
+      'calendar-access-token',
+    );
+  });
+
+  it('falls back to the provided eventId when recurring scope is all on a non-recurring event', async () => {
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({
+        id: 'event-3',
+        summary: 'Deep Work',
+        start: { date: '2026-06-02' },
+        end: { date: '2026-06-03' },
+      })
+      .mockResolvedValueOnce({
+        id: 'event-3',
+        summary: 'Focus Block',
+        start: { date: '2026-06-02' },
+        end: { date: '2026-06-03' },
+      });
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    await updateCalendarEvent.invoke(
+      {
+        eventId: 'event-3',
+        recurringEventScope: 'all',
+        summary: 'Focus Block',
+      },
+      {
+        configurable: {
+          access_token: 'calendar-access-token',
+        },
+      },
+    );
+
+    expect(fetchWithAuth).toHaveBeenNthCalledWith(
+      2,
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/event-3',
+      expect.objectContaining({ method: 'PATCH' }),
+      'calendar-access-token',
+    );
+  });
+
+  it('returns a friendly not-found message when the event does not exist', async () => {
+    vi.mocked(fetchWithAuth).mockRejectedValue(
+      new GoogleApiError(
+        'GOOGLE_API_REQUEST_FAILED',
+        'Google API request failed with status 404.',
+        {
+          retryable: false,
+          status: 404,
+        },
+      ),
+    );
+
+    await expect(
+      updateCalendarEvent.invoke(
+        {
+          eventId: 'missing-event',
+          summary: 'New title',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe("No event found with ID 'missing-event'.");
+
+    expect(interrupt).not.toHaveBeenCalled();
+    expect(fetchWithAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects when no update fields are provided', async () => {
+    await expect(
+      updateCalendarEvent.invoke(
+        { eventId: 'event-4' },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('Provide at least one field to update.');
+
+    expect(fetchWithAuth).not.toHaveBeenCalled();
+    expect(interrupt).not.toHaveBeenCalled();
+  });
+
+  it('rejects when timed and all-day fields are mixed', async () => {
+    await expect(
+      updateCalendarEvent.invoke(
+        {
+          eventId: 'event-5',
+          startDateTime: '2026-03-10T09:00:00-05:00',
+          startDate: '2026-03-10',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow(
+      'Timed event fields and all-day event fields cannot be combined.',
+    );
+
+    expect(fetchWithAuth).not.toHaveBeenCalled();
+  });
+
+  it('rejects impossible calendar dates', async () => {
+    await expect(
+      updateCalendarEvent.invoke(
+        {
+          eventId: 'event-6',
+          startDate: '2026-02-31',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('startDate "2026-02-31" is not a valid calendar date.');
+
+    await expect(
+      updateCalendarEvent.invoke(
+        {
+          eventId: 'event-6',
+          endDate: '2026-02-30',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('endDate "2026-02-30" is not a valid calendar date.');
+
+    expect(fetchWithAuth).not.toHaveBeenCalled();
+  });
+
+  it('rejects when endDate is before startDate', async () => {
+    await expect(
+      updateCalendarEvent.invoke(
+        {
+          eventId: 'event-7',
+          startDate: '2026-02-12',
+          endDate: '2026-02-10',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('endDate must not be before startDate.');
+
+    expect(fetchWithAuth).not.toHaveBeenCalled();
+  });
+
+  it('rejects when endDateTime is not after startDateTime', async () => {
+    await expect(
+      updateCalendarEvent.invoke(
+        {
+          eventId: 'event-8',
+          startDateTime: '2026-03-10T10:00:00-05:00',
+          endDateTime: '2026-03-10T09:00:00-05:00',
+        },
+        { configurable: { access_token: 'calendar-access-token' } },
+      ),
+    ).rejects.toThrow('endDateTime must be after startDateTime.');
+
+    expect(fetchWithAuth).not.toHaveBeenCalled();
   });
 });
