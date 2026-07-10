@@ -357,13 +357,20 @@ function toEventSnapshot(event: DetailedCalendarEvent): {
   };
 }
 
-function toProposedUpdateSnapshot(
-  input: UpdateCalendarEventInput,
-): Omit<ReturnType<typeof toEventSnapshot>, 'eventId' | 'recurringEventId'> {
+function toProposedUpdateSnapshot(input: UpdateCalendarEventInput): Omit<
+  ReturnType<typeof toEventSnapshot>,
+  'eventId' | 'recurringEventId'
+> & {
+  recurringEventScope?: 'single' | 'all';
+} {
   const proposed: Omit<
     ReturnType<typeof toEventSnapshot>,
     'eventId' | 'recurringEventId'
-  > = {};
+  > & { recurringEventScope?: 'single' | 'all' } = {};
+
+  if (input.recurringEventScope) {
+    proposed.recurringEventScope = input.recurringEventScope;
+  }
 
   if (input.summary) {
     proposed.summary = input.summary.trim();
@@ -407,6 +414,10 @@ function buildUpdateDescription(
   proposed: ReturnType<typeof toProposedUpdateSnapshot>,
 ): string {
   const currentSummary = currentEvent.summary?.trim() || 'Untitled event';
+  const scopeLabel =
+    proposed.recurringEventScope === 'all' && currentEvent.recurringEventId
+      ? ' (all instances)'
+      : '';
   const changes: string[] = [];
 
   if (proposed.summary) {
@@ -446,8 +457,8 @@ function buildUpdateDescription(
   }
 
   return changes.length > 0
-    ? `Update "${currentSummary}": ${changes.join(', ')}`
-    : `Update "${currentSummary}".`;
+    ? `Update "${currentSummary}"${scopeLabel}: ${changes.join(', ')}`
+    : `Update "${currentSummary}"${scopeLabel}.`;
 }
 
 const createCalendarEventSchema = z
@@ -855,17 +866,28 @@ export const updateCalendarEvent = tool(
       input.recurringEventScope === 'all' && currentEvent.recurringEventId
         ? currentEvent.recurringEventId
         : input.eventId;
-    const event = await fetchWithAuth<DetailedCalendarEvent>(
-      buildUpdateCalendarEventUrl(targetEventId),
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
+
+    let event: DetailedCalendarEvent | null;
+
+    try {
+      event = await fetchWithAuth<DetailedCalendarEvent>(
+        buildUpdateCalendarEventUrl(targetEventId),
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(buildUpdateEventRequestBody(input)),
         },
-        body: JSON.stringify(buildUpdateEventRequestBody(input)),
-      },
-      accessToken,
-    );
+        accessToken,
+      );
+    } catch (error) {
+      if (error instanceof GoogleApiError && error.status === 404) {
+        return `No event found with ID '${targetEventId}'. It may have been deleted while waiting for approval.`;
+      }
+
+      throw error;
+    }
 
     return formatEventDetail(
       event ?? {

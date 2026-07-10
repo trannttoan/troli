@@ -661,6 +661,15 @@ describe('updateCalendarEvent', () => {
       },
     );
 
+    expect(interrupt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Update "1:1" (all instances): summary → "Manager 1:1"',
+        proposed: {
+          recurringEventScope: 'all',
+          summary: 'Manager 1:1',
+        },
+      }),
+    );
     expect(fetchWithAuth).toHaveBeenNthCalledWith(
       2,
       'https://www.googleapis.com/calendar/v3/calendars/primary/events/series-1',
@@ -698,6 +707,11 @@ describe('updateCalendarEvent', () => {
       },
     );
 
+    expect(interrupt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Update "Deep Work": summary → "Focus Block"',
+      }),
+    );
     expect(fetchWithAuth).toHaveBeenNthCalledWith(
       2,
       'https://www.googleapis.com/calendar/v3/calendars/primary/events/event-3',
@@ -734,6 +748,46 @@ describe('updateCalendarEvent', () => {
 
     expect(interrupt).not.toHaveBeenCalled();
     expect(fetchWithAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a friendly message when the event is deleted between interrupt and resume', async () => {
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({
+        id: 'event-deleted',
+        summary: 'Doomed Event',
+        start: { dateTime: '2026-07-01T14:00:00-04:00' },
+        end: { dateTime: '2026-07-01T15:00:00-04:00' },
+      })
+      .mockRejectedValueOnce(
+        new GoogleApiError(
+          'GOOGLE_API_REQUEST_FAILED',
+          'Google API request failed with status 404.',
+          {
+            retryable: false,
+            status: 404,
+          },
+        ),
+      );
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    await expect(
+      updateCalendarEvent.invoke(
+        {
+          eventId: 'event-deleted',
+          summary: 'Updated Title',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe(
+      "No event found with ID 'event-deleted'. It may have been deleted while waiting for approval.",
+    );
+
+    expect(interrupt).toHaveBeenCalled();
+    expect(fetchWithAuth).toHaveBeenCalledTimes(2);
   });
 
   it('rejects when no update fields are provided', async () => {
