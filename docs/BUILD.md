@@ -22,7 +22,7 @@ One thin path end-to-end: sign in → send message → agent responds → see it
 - **Auth:** Google OAuth with PKCE via `expo-auth-session`. Token storage in `expo-secure-store`. Silent refresh with 5-minute buffer and promise-based mutex.
 - **Thread bootstrap:** On first login, client creates a thread via `POST /threads` using the deterministic ID `troli-{sha256(email)}`. On subsequent launches, client hydrates the chat by fetching thread state via `GET /threads/{thread_id}` and rendering existing messages before the user sends anything. Client persists the thread ID locally alongside auth tokens.
 - **Chat UI:** Minimal chat screen — flat message list (user right, agent left), text input bar with send button, SSE streaming of agent tokens, typing indicator.
-- **Backend:** Bare agent graph with system prompt (no tools). Accept messages via `POST /threads/{id}/runs`, return SSE stream. Thread ID derived from `troli-{sha256(email)}`.
+- **Backend:** Bare agent graph with system prompt (no tools). Accept messages via `POST /threads/{id}/runs/stream`, return SSE stream. Thread ID derived from `troli-{sha256(email)}`.
 - **Conversation model:** Timestamp all messages at creation time. Implement 7-day message window filter + 200-message hard cap as a preprocessing node in the graph. This validates the real conversation model from day one, even before tools generate meaningful history.
 - **Wiring:** Client sends Google access token + device timezone with each request. Backend validates token via Google tokeninfo endpoint and checks thread authorization.
 - **Deploy:** First LangGraph Cloud deployment. Confirm mobile → backend → LLM → SSE → mobile round-trip works on a real device.

@@ -97,9 +97,9 @@ Simple chat bubble layout:
 
 The client communicates with the backend via two patterns:
 
-**Sending a message:** POST to `/threads/{thread_id}/runs` with the user's message and access token. The response is an SSE stream of agent output. The stream uses typed events — regular tokens arrive as `events` payloads. When the agent hits an interrupt (HITL), the interrupt payload is included in the stream and the stream ends with the thread in `interrupted` status. The client renders the approval card from the interrupt payload in the stream.
+**Sending a message:** POST to `/threads/{thread_id}/runs/stream` with the user's message and access token. The response is an SSE stream of agent output. The stream uses typed events — regular tokens arrive as `messages/partial` payloads. After the stream completes, the client checks thread status via the API. If the thread is `interrupted`, the client fetches the thread state, extracts the interrupt payload from the `tasks` field, and renders an approval card inline.
 
-**Resuming after HITL interrupt:** POST to `/threads/{thread_id}/runs` with a `Command(resume=...)` payload containing the user's decision (approve or reject). The response is again an SSE stream.
+**Resuming after HITL interrupt:** POST to `/threads/{thread_id}/runs/stream` with `input: null` and a `command: { resume: "approve"|"reject" }` payload containing the user's decision. The response is again an SSE stream.
 
 **Timezone:** The client reads the device timezone via `expo-localization` (`getCalendars()[0].timeZone`) and sends it with each request. The backend injects it into the system prompt so the agent interprets relative dates correctly.
 
@@ -277,11 +277,11 @@ const update_calendar_event = tool(
 
 1. Agent calls a write tool (update or delete).
 2. Tool calls `interrupt()` with a payload describing the proposed action.
-3. LangGraph checkpoints the thread state and marks it as `interrupted`.
-4. Backend returns the interrupt payload to the client via SSE.
-5. Client renders an approval card with Approve/Reject buttons.
+3. LangGraph checkpoints the thread state and marks it as `interrupted`. The SSE stream ends.
+4. Client detects interrupt post-stream: checks thread status, fetches thread state, extracts interrupt payload from `tasks[].interrupts[].value`.
+5. Client renders an approval card with Approve/Reject buttons. Same detection path handles app reopen with a pending interrupt.
 6. User taps a button.
-7. Client POSTs `Command(resume="approve")` or `Command(resume="reject")` to the resume endpoint.
+7. Client POSTs `Command(resume="approve")` or `Command(resume="reject")` to `/threads/{id}/runs/stream` (with `input: null`).
 8. LangGraph resumes the graph from the checkpoint. The tool receives the decision and either executes or cancels.
 
 ### 3.6 System Prompt
@@ -419,11 +419,12 @@ LANGSMITH_PROJECT=troli-v1
 
 The backend exposes these endpoints to the mobile client. When using LangGraph Cloud, most of these are provided out of the box.
 
-| Method | Path                        | Purpose                                                       |
-| ------ | --------------------------- | ------------------------------------------------------------- |
-| POST   | `/threads`                  | Create a new thread for a user                                |
-| GET    | `/threads/{thread_id}`      | Get thread state (messages, status)                           |
-| POST   | `/threads/{thread_id}/runs` | Send a user message or resume after HITL. Returns SSE stream. |
+| Method | Path                               | Purpose                                                       |
+| ------ | ---------------------------------- | ------------------------------------------------------------- |
+| POST   | `/threads`                         | Create a new thread for a user                                |
+| GET    | `/threads/{thread_id}`             | Get thread state (messages, status)                           |
+| GET    | `/threads/{thread_id}/state`       | Get full thread state (messages, tasks, interrupt payloads)   |
+| POST   | `/threads/{thread_id}/runs/stream` | Send a user message or resume after HITL. Returns SSE stream. |
 
 The client includes the user's Google access token in the `Authorization` header of every request. The backend extracts it and passes it to tool functions for Google API calls.
 
@@ -553,11 +554,11 @@ typescript
 
 ### 10.2 Mobile Client (React Native Testing Library)
 
-| Layer        | What to Test                            | Approach                                                                                         |
-| ------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Components   | Chat bubbles, approval cards, input bar | Render with test data. Verify approve/reject callbacks, disabled state during processing.        |
-| Auth flow    | Token storage, silent refresh, sign-out | Mock `expo-secure-store` and `expo-auth-session`. Verify token lifecycle.                        |
-| SSE handling | Stream parsing, interrupt detection     | Mock SSE responses. Verify messages render incrementally and approval cards appear on interrupt. |
+| Layer        | What to Test                                    | Approach                                                                                                                                        |
+| ------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Components   | Chat bubbles, approval cards, input bar         | Render with test data. Verify approve/reject callbacks, disabled state during processing.                                                       |
+| Auth flow    | Token storage, silent refresh, sign-out         | Mock `expo-secure-store` and `expo-auth-session`. Verify token lifecycle.                                                                       |
+| SSE handling | Stream parsing, post-stream interrupt detection | Mock SSE responses. Verify messages render incrementally. Mock thread state to verify interrupt payload extraction and approval card rendering. |
 
 ### 10.3 Deferred to Post-v1.0
 

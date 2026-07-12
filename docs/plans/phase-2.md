@@ -149,7 +149,7 @@ The access token lives in `config.configurable.access_token`. Tools receive the 
 
 ## Resolved Questions
 
-1. **Interrupt detection strategy**: Use post-stream detection, not in-stream parsing. After `streamRun()` completes (or on app reopen), check thread status and extract interrupt payload from thread state. This avoids coupling the SSE parser to interrupt-specific event shapes, eliminates the need for two detection mechanisms (in-stream vs reopen), and the extra HTTP roundtrip latency is negligible. The exact SSE event shape and `tasks` field structure are empirical questions — resolve by testing against `langgraph dev` during the first HITL subtask.
+1. **Interrupt detection strategy**: Use post-stream detection, not in-stream parsing. After `streamRun()` completes (or on app reopen), check thread status and extract interrupt payload from thread state. This avoids coupling the SSE parser to interrupt-specific event shapes, eliminates the need for two detection mechanisms (in-stream vs reopen), and the extra HTTP roundtrip latency is negligible. The `tasks` field structure has been verified against the LangGraph API server source (verified against `langgraph-ai/langgraphjs` `libs/langgraph-api/src/state.mts`, `stateSnapshotToThreadState()`).
 
 2. **History preservation after windowing**: Go with the single-channel refactor (remove `llmInputMessages`, window directly into `messages`). No v1.0 use case requires accessing old messages within a single run. Checkpointer history covers debugging needs. Simpler architecture wins.
 
@@ -161,7 +161,7 @@ Key files to read for planning: `backend/src/agent.ts`, `mobile/src/services/lan
 
 1. **Single-channel refactor.** Remove `llmInputMessages` from `AgentState`. Preprocess replaces `messages` with the windowed subset. The agent reads from `messages` directly. Tool calls/results flow through `messages` naturally. History loss is acceptable — checkpointer prior states cover debugging.
 
-2. **Post-stream interrupt detection.** Do NOT parse interrupt events from the SSE stream in real-time. After `streamRun()` completes, check thread status via the API and extract the interrupt payload from thread state. Same code path handles both "interrupt during active session" and "reopen app with pending interrupt." The exact SSE event shape and `tasks` field structure should be verified empirically against `langgraph dev` during the first HITL subtask.
+2. **Post-stream interrupt detection.** Do NOT parse interrupt events from the SSE stream in real-time. After `streamRun()` completes, check thread status via the API and extract the interrupt payload from thread state. Same code path handles both "interrupt during active session" and "reopen app with pending interrupt." The `tasks` field structure has been verified against the LangGraph API server source (verified against `langgraph-ai/langgraphjs` `libs/langgraph-api/src/state.mts`, `stateSnapshotToThreadState()`).
 
 3. **OAuth scope expansion.** Add `calendar.events.owned` to `GOOGLE_SCOPES` in `mobile/src/utils/auth.ts`. Force re-auth for existing sessions when stored scopes don't include the new one.
 
@@ -245,9 +245,9 @@ Key files to read for planning: `backend/src/agent.ts`, `mobile/src/services/lan
 
 #### 3.2 — Interrupt detection service layer
 
-- **Description**: Add three functions to `langgraph.ts`: (1) `getThreadState()` — fetches full thread state including `tasks` field; (2) `extractInterruptPayload(state)` — extracts `InterruptPayload` from thread state's `tasks` array, derives stable ID as `interrupt-{taskId}`; (3) `resumeRun(threadId, decision, callbacks)` — POST `/threads/{id}/runs/stream` with `{ assistant_id, command: { resume: decision } }` (no `input`), streams response via `consumeSseStream`. Extend `HydratedChatMessage` with optional `interrupt?: InterruptPayload` field. **Note**: exact `tasks` field shape must be verified empirically against `langgraph dev` before finalizing extraction logic.
-- **Files involved**: `mobile/src/services/langgraph.ts` (modify), `mobile/src/__tests__/services/langgraph.test.ts` (create or modify)
-- **Prerequisites**: 3.1 (need a backend tool that actually interrupts, to verify `tasks` shape empirically)
+- **Description**: Add three functions to `langgraph.ts`: (1) `getThreadState()` — fetches full thread state including `tasks` field; (2) `extractInterruptPayload(state)` — extracts `InterruptPayload` from thread state's `tasks` array, derives stable ID as `interrupt-{taskId}`; (3) `resumeRun(threadId, decision, callbacks)` — POST `/threads/{id}/runs/stream` with `{ assistant_id, command: { resume: decision } }` (no `input`), streams response via `consumeSseStream`. `HydratedChatMessage` is NOT extended here — interrupt message shaping belongs in slice 3.3 where the synthetic message is constructed. `tasks` field shape verified against LangGraph API server source (verified against `langgraph-ai/langgraphjs` `libs/langgraph-api/src/state.mts`, `stateSnapshotToThreadState()`).
+- **Files involved**: `mobile/src/services/langgraph.ts` (modify), `mobile/src/services/__tests__/langgraph.test.ts` (modify)
+- **Prerequisites**: 3.1 (interrupt payload shape established by update tool)
 - **Acceptance criteria**: Unit tests: `extractInterruptPayload` extracts payload and stable ID from mocked thread state. `resumeRun` sends correct request shape. `getThreadState` fetches and parses response.
 - **Estimated scope**: Medium
 
