@@ -15,9 +15,26 @@ type LangGraphThreadResponse = {
 };
 
 type LangGraphStateResponse = {
+  tasks?: LangGraphTask[];
   values?: {
     messages?: unknown[];
   };
+};
+
+type LangGraphInterrupt = {
+  id?: string;
+  value?: unknown;
+};
+
+type LangGraphTask = {
+  checkpoint?: object | null;
+  error?: string | null;
+  id: string;
+  interrupts?: LangGraphInterrupt[];
+  name?: string;
+  path?: Array<number | string>;
+  result?: unknown | null;
+  state?: object | null;
 };
 
 export type HydratedChatMessage = {
@@ -25,6 +42,14 @@ export type HydratedChatMessage = {
   role: 'assistant' | 'user';
   text: string;
   timestamp: number | null;
+};
+
+export type InterruptPayload = {
+  action: string;
+  current: Record<string, unknown>;
+  description: string;
+  id: string;
+  proposed: Record<string, unknown> | null;
 };
 
 export type LangGraphThreadStatus = 'busy' | 'error' | 'idle' | 'interrupted';
@@ -85,14 +110,17 @@ export async function bootstrapThread(
 export async function hydrateThreadMessages(
   threadId: string,
 ): Promise<HydratedChatMessage[]> {
-  const response = await fetchLangGraph<LangGraphStateResponse>(
-    `/threads/${threadId}/state`,
-    {
-      method: 'GET',
-    },
-  );
+  const response = await getThreadState(threadId);
 
   return normalizeThreadMessages(response.values?.messages ?? []);
+}
+
+export async function getThreadState(
+  threadId: string,
+): Promise<LangGraphStateResponse> {
+  return fetchLangGraph<LangGraphStateResponse>(`/threads/${threadId}/state`, {
+    method: 'GET',
+  });
 }
 
 export async function streamRun(input: StreamRunInput): Promise<void> {

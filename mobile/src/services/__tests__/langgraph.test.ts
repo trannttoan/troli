@@ -15,6 +15,7 @@ import { consumeSseStream } from '../sse';
 import {
   bootstrapThread,
   getMissingLangGraphConfig,
+  getThreadState,
   hydrateThreadMessages,
   isLangGraphConfigured,
   streamRun,
@@ -120,6 +121,45 @@ describe('langgraph service', () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
+      'https://langgraph.example.com/threads/thread-123/state',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: 'application/json',
+          'x-api-key': 'langgraph-api-key',
+        }),
+        method: 'GET',
+      }),
+    );
+  });
+
+  it('fetches the full thread state including tasks', async () => {
+    const stateResponse = {
+      tasks: [
+        {
+          id: 'task-1',
+          interrupts: [
+            {
+              value: {
+                action: 'update_calendar_event',
+                current: { title: 'Old title' },
+                description: 'Update the event title.',
+                proposed: { title: 'New title' },
+              },
+            },
+          ],
+          name: 'agent',
+        },
+      ],
+      values: {
+        messages: [{ content: 'Hello', id: 'msg-1', role: 'human' }],
+      },
+    };
+
+    fetchMock.mockResolvedValue(createJsonResponse(stateResponse));
+
+    await expect(getThreadState('thread-123')).resolves.toEqual(stateResponse);
+
+    expect(fetchMock).toHaveBeenCalledWith(
       'https://langgraph.example.com/threads/thread-123/state',
       expect.objectContaining({
         headers: expect.objectContaining({
