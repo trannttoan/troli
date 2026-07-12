@@ -123,6 +123,46 @@ export async function getThreadState(
   });
 }
 
+export function extractInterruptPayload(
+  state: LangGraphStateResponse,
+): InterruptPayload | null {
+  const task = state.tasks?.find(
+    (candidate) =>
+      Array.isArray(candidate.interrupts) && candidate.interrupts.length > 0,
+  );
+
+  if (!task) {
+    return null;
+  }
+
+  const interrupt = task.interrupts?.[0];
+  const payload = interrupt?.value;
+
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const { action, current, description, proposed } = payload;
+
+  if (
+    typeof action !== 'string' ||
+    typeof description !== 'string' ||
+    !isRecord(current) ||
+    !('proposed' in payload) ||
+    (proposed !== null && !isRecord(proposed))
+  ) {
+    return null;
+  }
+
+  return {
+    action,
+    current,
+    description,
+    id: `interrupt-${task.id}`,
+    proposed,
+  };
+}
+
 export async function streamRun(input: StreamRunInput): Promise<void> {
   const response = await fetchLangGraphResponse(
     `/threads/${input.threadId}/runs/stream`,
