@@ -64,6 +64,16 @@ export type StreamRunInput = {
   timezone: string;
 };
 
+export type ResumeRunInput = {
+  accessToken: string;
+  decision: 'approve' | 'reject';
+  onAssistantTextSnapshot?: (text: string) => void | Promise<void>;
+  onEvent?: (event: ParsedSseEvent) => void | Promise<void>;
+  signal?: AbortSignal;
+  threadId: string;
+  timezone: string;
+};
+
 export type ParsedSseEvent = SseEvent & {
   json: unknown | null;
 };
@@ -164,27 +174,59 @@ export function extractInterruptPayload(
 }
 
 export async function streamRun(input: StreamRunInput): Promise<void> {
+  return streamRunWithBody(input, {
+    assistant_id: getLangGraphConfig().assistantId,
+    config: {
+      configurable: {
+        access_token: input.accessToken,
+        timezone: input.timezone,
+      },
+    },
+    input: {
+      messages: [
+        {
+          content: input.message,
+          role: 'human',
+        },
+      ],
+    },
+    stream_mode: ['messages'],
+  });
+}
+
+export async function resumeRun(input: ResumeRunInput): Promise<void> {
+  return streamRunWithBody(input, {
+    assistant_id: getLangGraphConfig().assistantId,
+    command: {
+      resume: input.decision,
+    },
+    config: {
+      configurable: {
+        access_token: input.accessToken,
+        timezone: input.timezone,
+      },
+    },
+    input: null,
+    stream_mode: ['messages'],
+  });
+}
+
+async function streamRunWithBody(
+  input: Pick<
+    StreamRunInput | ResumeRunInput,
+    | 'accessToken'
+    | 'onAssistantTextSnapshot'
+    | 'onEvent'
+    | 'signal'
+    | 'threadId'
+    | 'timezone'
+  >,
+  body: Record<string, unknown>,
+): Promise<void> {
   const response = await fetchLangGraphResponse(
     `/threads/${input.threadId}/runs/stream`,
     {
-      body: JSON.stringify({
-        assistant_id: getLangGraphConfig().assistantId,
-        config: {
-          configurable: {
-            access_token: input.accessToken,
-            timezone: input.timezone,
-          },
-        },
-        input: {
-          messages: [
-            {
-              content: input.message,
-              role: 'human',
-            },
-          ],
-        },
-        stream_mode: ['messages'],
-      }),
+      body: JSON.stringify(body),
       headers: {
         Accept: 'text/event-stream',
         'Content-Type': 'application/json',

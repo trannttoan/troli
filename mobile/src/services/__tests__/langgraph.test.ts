@@ -19,6 +19,7 @@ import {
   getThreadState,
   hydrateThreadMessages,
   isLangGraphConfigured,
+  resumeRun,
   streamRun,
 } from '../langgraph';
 
@@ -391,6 +392,95 @@ describe('langgraph service', () => {
     expect(onEvent).toHaveBeenCalledTimes(2);
     expect(onAssistantTextSnapshot).toHaveBeenNthCalledWith(1, 'Hello');
     expect(onAssistantTextSnapshot).toHaveBeenNthCalledWith(2, 'Hello world');
+  });
+
+  it('posts a resume command and forwards streamed assistant snapshots', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(null, {
+        headers: {
+          'content-type': 'text/event-stream',
+        },
+        status: 200,
+      }),
+    );
+
+    jest.mocked(consumeSseStream).mockImplementation(async ({ onEvent }) => {
+      await onEvent({
+        data: JSON.stringify({
+          chunk: {
+            delta: [{ text: 'Approved' }],
+            role: 'assistant',
+          },
+        }),
+        event: 'messages/partial',
+      });
+    });
+
+    const onAssistantTextSnapshot = jest.fn<() => Promise<void>>();
+
+    await resumeRun({
+      accessToken: 'google-access-token',
+      decision: 'approve',
+      onAssistantTextSnapshot,
+      threadId: 'thread-123',
+      timezone: 'America/Detroit',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://langgraph.example.com/threads/thread-123/runs/stream',
+      expect.objectContaining({
+        body: JSON.stringify({
+          assistant_id: 'agent',
+          command: {
+            resume: 'approve',
+          },
+          config: {
+            configurable: {
+              access_token: 'google-access-token',
+              timezone: 'America/Detroit',
+            },
+          },
+          input: null,
+          stream_mode: ['messages'],
+        }),
+        headers: expect.objectContaining({
+          Accept: 'text/event-stream',
+          'Content-Type': 'application/json',
+          'x-api-key': 'langgraph-api-key',
+        }),
+        method: 'POST',
+      }),
+    );
+    expect(onAssistantTextSnapshot).toHaveBeenCalledWith('Approved');
+  });
+
+  it('throws when the resume stream emits an error event', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(null, {
+        headers: {
+          'content-type': 'text/event-stream',
+        },
+        status: 200,
+      }),
+    );
+
+    jest.mocked(consumeSseStream).mockImplementation(async ({ onEvent }) => {
+      await onEvent({
+        data: JSON.stringify({
+          error: 'Approval failed.',
+        }),
+        event: 'error',
+      });
+    });
+
+    await expect(
+      resumeRun({
+        accessToken: 'google-access-token',
+        decision: 'reject',
+        threadId: 'thread-123',
+        timezone: 'America/Detroit',
+      }),
+    ).rejects.toThrow('Approval failed.');
   });
 
   it('ignores messages/complete events from preprocess node', async () => {
