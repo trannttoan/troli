@@ -14,6 +14,7 @@ jest.mock('../sse', () => ({
 import { consumeSseStream } from '../sse';
 import {
   bootstrapThread,
+  extractInterruptPayload,
   getMissingLangGraphConfig,
   getThreadState,
   hydrateThreadMessages,
@@ -169,6 +170,162 @@ describe('langgraph service', () => {
         method: 'GET',
       }),
     );
+  });
+
+  it('extracts the first interrupt payload with a stable synthetic id', () => {
+    expect(
+      extractInterruptPayload({
+        tasks: [
+          {
+            id: 'task-1',
+            interrupts: [
+              {
+                value: {
+                  action: 'update_calendar_event',
+                  current: { title: 'Old title' },
+                  description: 'Update the event title.',
+                  proposed: { title: 'New title' },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({
+      action: 'update_calendar_event',
+      current: { title: 'Old title' },
+      description: 'Update the event title.',
+      id: 'interrupt-task-1',
+      proposed: { title: 'New title' },
+    });
+  });
+
+  it('extracts delete interrupts with proposed set to null', () => {
+    expect(
+      extractInterruptPayload({
+        tasks: [
+          {
+            id: 'task-delete',
+            interrupts: [
+              {
+                value: {
+                  action: 'delete_calendar_event',
+                  current: { title: 'Event to remove' },
+                  description: 'Delete the event.',
+                  proposed: null,
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({
+      action: 'delete_calendar_event',
+      current: { title: 'Event to remove' },
+      description: 'Delete the event.',
+      id: 'interrupt-task-delete',
+      proposed: null,
+    });
+  });
+
+  it('returns null when tasks are missing', () => {
+    expect(extractInterruptPayload({ values: { messages: [] } })).toBeNull();
+  });
+
+  it('returns null when tasks are empty', () => {
+    expect(extractInterruptPayload({ tasks: [] })).toBeNull();
+  });
+
+  it('returns null when tasks have no interrupts', () => {
+    expect(
+      extractInterruptPayload({
+        tasks: [
+          {
+            id: 'task-1',
+            interrupts: [],
+          },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it('returns null when the interrupt payload is malformed', () => {
+    expect(
+      extractInterruptPayload({
+        tasks: [
+          {
+            id: 'missing-action',
+            interrupts: [
+              {
+                value: {
+                  current: { title: 'Old title' },
+                  description: 'Missing action.',
+                  proposed: { title: 'New title' },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBeNull();
+
+    expect(
+      extractInterruptPayload({
+        tasks: [
+          {
+            id: 'missing-description',
+            interrupts: [
+              {
+                value: {
+                  action: 'update_calendar_event',
+                  current: { title: 'Old title' },
+                  proposed: { title: 'New title' },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBeNull();
+
+    expect(
+      extractInterruptPayload({
+        tasks: [
+          {
+            id: 'missing-current',
+            interrupts: [
+              {
+                value: {
+                  action: 'update_calendar_event',
+                  current: null,
+                  description: 'Missing current.',
+                  proposed: { title: 'New title' },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBeNull();
+
+    expect(
+      extractInterruptPayload({
+        tasks: [
+          {
+            id: 'missing-proposed',
+            interrupts: [
+              {
+                value: {
+                  action: 'update_calendar_event',
+                  current: { title: 'Old title' },
+                  description: 'Missing proposed.',
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBeNull();
   });
 
   it('parses streamed chunk payloads into assistant text snapshots', async () => {
