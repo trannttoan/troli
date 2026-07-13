@@ -2,7 +2,10 @@ import { create } from 'zustand';
 
 import {
   bootstrapThread as bootstrapRemoteThread,
+  extractInterruptPayload,
   type HydratedChatMessage,
+  getThreadState,
+  type InterruptPayload,
   streamRun,
 } from '../services/langgraph';
 import { generateThreadId } from '../utils/thread';
@@ -10,8 +13,9 @@ import { useAuthStore } from './auth';
 
 export type ChatMessage = {
   id: string;
+  interrupt?: InterruptPayload;
   role: 'user' | 'assistant';
-  status?: 'streaming';
+  status?: 'approved' | 'pending_approval' | 'rejected' | 'streaming';
   text: string;
   timestamp?: number | null;
 };
@@ -20,6 +24,7 @@ type ChatState = {
   bootstrapThread: () => Promise<void>;
   clearError: () => void;
   errorMessage: string | null;
+  hasPendingApproval: () => boolean;
   hydrateMessages: (messages: HydratedChatMessage[]) => void;
   isBootstrapping: boolean;
   isSending: boolean;
@@ -37,7 +42,7 @@ const initialChatState = {
   threadId: null as string | null,
 };
 
-export const useChatStore = create<ChatState>((set) => ({
+export const useChatStore = create<ChatState>((set, get) => ({
   ...initialChatState,
   bootstrapThread: async () => {
     const email = useAuthStore.getState().email;
@@ -82,6 +87,8 @@ export const useChatStore = create<ChatState>((set) => ({
     set({ errorMessage: null });
   },
   errorMessage: null,
+  hasPendingApproval: () =>
+    get().messages.some((message) => message.status === 'pending_approval'),
   hydrateMessages: (messages) => {
     set({
       errorMessage: null,
@@ -156,6 +163,17 @@ export const useChatStore = create<ChatState>((set) => ({
       });
 
       const hydratedMessages = await bootstrapRemoteThread(threadId);
+      let messages = normalizeMessages(hydratedMessages.messages);
+
+      if (hydratedMessages.status === 'interrupted') {
+        const interrupt = extractInterruptPayload(
+          await getThreadState(threadId),
+        );
+
+        if (interrupt) {
+          messages = upsertInterruptMessage(messages, interrupt);
+        }
+      }
 
       set({
         errorMessage:
@@ -163,7 +181,7 @@ export const useChatStore = create<ChatState>((set) => ({
             ? 'The thread reported an error after streaming. Conversation history was reloaded and you can send another message.'
             : null,
         isSending: false,
-        messages: normalizeMessages(hydratedMessages.messages),
+        messages,
         threadId,
       });
     } catch (error) {
@@ -179,13 +197,24 @@ export const useChatStore = create<ChatState>((set) => ({
 
       try {
         const hydratedMessages = await bootstrapRemoteThread(threadId);
+        let messages = normalizeMessages(hydratedMessages.messages);
+
+        if (hydratedMessages.status === 'interrupted') {
+          const interrupt = extractInterruptPayload(
+            await getThreadState(threadId),
+          );
+
+          if (interrupt) {
+            messages = upsertInterruptMessage(messages, interrupt);
+          }
+        }
 
         set({
           errorMessage:
             hydratedMessages.status === 'error'
               ? 'The thread reported an error after streaming. Conversation history was reloaded and you can send another message.'
               : null,
-          messages: normalizeMessages(hydratedMessages.messages),
+          messages,
           threadId,
         });
         return;
@@ -216,6 +245,28 @@ function normalizeMessages(messages: HydratedChatMessage[]): ChatMessage[] {
     text: message.text,
     timestamp: message.timestamp,
   }));
+}
+
+function upsertInterruptMessage(
+  messages: ChatMessage[],
+  interrupt: InterruptPayload,
+): ChatMessage[] {
+  const interruptMessage: ChatMessage = {
+    id: interrupt.id,
+    interrupt,
+    role: 'assistant',
+    status: 'pending_approval',
+    text: interrupt.description,
+    timestamp: null,
+  };
+
+  if (!messages.some((message) => message.id === interrupt.id)) {
+    return [...messages, interruptMessage];
+  }
+
+  return messages.map((message) =>
+    message.id === interrupt.id ? interruptMessage : message,
+  );
 }
 
 function upsertStreamingAssistantSnapshot(
