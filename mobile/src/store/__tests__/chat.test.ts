@@ -53,6 +53,30 @@ function createInterruptPayload() {
   };
 }
 
+function createApprovalMessage(
+  status: 'approved' | 'pending_approval' | 'rejected' = 'pending_approval',
+) {
+  return {
+    id: 'interrupt-task-1',
+    interrupt: createInterruptPayload(),
+    role: 'assistant' as const,
+    status,
+    text: 'Approve the event update.',
+    timestamp: null,
+  };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return { promise, reject, resolve };
+}
+
 describe('useChatStore', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -485,6 +509,284 @@ describe('useChatStore', () => {
     });
   });
 
+  describe('resumeApproval', () => {
+    it('optimistically approves during resume, streams, hydrates, and clears isSending', async () => {
+      const { chatStore, langgraph } = loadChatModule();
+      const hydration = createDeferred<{
+        messages: Array<{
+          id: string;
+          role: 'assistant' | 'user';
+          text: string;
+          timestamp: number;
+        }>;
+        status: 'idle';
+      }>();
+
+      jest.mocked(langgraph.resumeRun).mockImplementation(async (input) => {
+        expect(input.decision).toBe('approve');
+        expect(chatStore.useChatStore.getState().isSending).toBe(true);
+        expect(chatStore.useChatStore.getState().messages).toEqual([
+          createApprovalMessage('approved'),
+        ]);
+
+        await input.onAssistantTextSnapshot?.('Applying approval');
+
+        expect(
+          chatStore.useChatStore
+            .getState()
+            .messages.some((message) => message.status === 'streaming'),
+        ).toBe(true);
+      });
+      jest.mocked(langgraph.bootstrapThread).mockImplementation(async () => {
+        expect(chatStore.useChatStore.getState().isSending).toBe(true);
+        return hydration.promise;
+      });
+      chatStore.useChatStore.setState({
+        messages: [createApprovalMessage()],
+        threadId: 'thread-1',
+      });
+
+      const resumePromise = chatStore.useChatStore
+        .getState()
+        .resumeApproval('interrupt-task-1', 'approve');
+
+      await Promise.resolve();
+
+      expect(chatStore.useChatStore.getState().isSending).toBe(true);
+
+      hydration.resolve({
+        messages: [
+          { id: 'msg-1', role: 'user', text: 'Approve this', timestamp: 1000 },
+          {
+            id: 'msg-2',
+            role: 'assistant',
+            text: 'Approved.',
+            timestamp: 1001,
+          },
+        ],
+        status: 'idle',
+      });
+
+      await resumePromise;
+
+      expect(langgraph.resumeRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accessToken: 'access-token',
+          decision: 'approve',
+          threadId: 'thread-1',
+        }),
+      );
+      expect(chatStore.useChatStore.getState().messages).toEqual([
+        { id: 'msg-1', role: 'user', text: 'Approve this', timestamp: 1000 },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          text: 'Approved.',
+          timestamp: 1001,
+        },
+      ]);
+      expect(chatStore.useChatStore.getState().isSending).toBe(false);
+    });
+
+    it('optimistically rejects during resume before hydration replaces messages', async () => {
+      const { chatStore, langgraph } = loadChatModule();
+
+      jest.mocked(langgraph.resumeRun).mockImplementation(async (input) => {
+        expect(input.decision).toBe('reject');
+        expect(chatStore.useChatStore.getState().messages).toEqual([
+          createApprovalMessage('rejected'),
+        ]);
+      });
+      jest.mocked(langgraph.bootstrapThread).mockResolvedValue({
+        messages: [
+          { id: 'msg-1', role: 'user', text: 'Reject this', timestamp: 1000 },
+          {
+            id: 'msg-2',
+            role: 'assistant',
+            text: 'Rejected.',
+            timestamp: 1001,
+          },
+        ],
+        status: 'idle',
+      });
+      chatStore.useChatStore.setState({
+        messages: [createApprovalMessage()],
+        threadId: 'thread-1',
+      });
+
+      await chatStore.useChatStore
+        .getState()
+        .resumeApproval('interrupt-task-1', 'reject');
+
+      expect(langgraph.resumeRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decision: 'reject',
+        }),
+      );
+      expect(chatStore.useChatStore.getState().messages).toEqual([
+        { id: 'msg-1', role: 'user', text: 'Reject this', timestamp: 1000 },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          text: 'Rejected.',
+          timestamp: 1001,
+        },
+      ]);
+      expect(chatStore.useChatStore.getState().isSending).toBe(false);
+    });
+
+    it('uses canonical hydrated messages when resume fails but recovery succeeds', async () => {
+      const { chatStore, langgraph } = loadChatModule();
+
+      jest
+        .mocked(langgraph.resumeRun)
+        .mockRejectedValue(new Error('Resume failed'));
+      jest.mocked(langgraph.bootstrapThread).mockImplementation(async () => {
+        expect(chatStore.useChatStore.getState().isSending).toBe(true);
+        return {
+          messages: [
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              text: 'Server already handled it.',
+              timestamp: 1001,
+            },
+          ],
+          status: 'idle',
+        };
+      });
+      chatStore.useChatStore.setState({
+        errorMessage: 'stale error',
+        messages: [createApprovalMessage()],
+        threadId: 'thread-1',
+      });
+
+      await chatStore.useChatStore
+        .getState()
+        .resumeApproval('interrupt-task-1', 'approve');
+
+      expect(chatStore.useChatStore.getState().messages).toEqual([
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          text: 'Server already handled it.',
+          timestamp: 1001,
+        },
+      ]);
+      expect(chatStore.useChatStore.getState().errorMessage).toBeNull();
+      expect(chatStore.useChatStore.getState().isSending).toBe(false);
+    });
+
+    it('rolls back to pending approval when both resume and recovery hydration fail', async () => {
+      const { chatStore, langgraph } = loadChatModule();
+
+      jest.mocked(langgraph.resumeRun).mockImplementation(async (input) => {
+        await input.onAssistantTextSnapshot?.('Applying approval');
+        throw new Error('Resume failed');
+      });
+      jest
+        .mocked(langgraph.bootstrapThread)
+        .mockRejectedValue(new Error('Hydrate failed'));
+      chatStore.useChatStore.setState({
+        messages: [createApprovalMessage()],
+        threadId: 'thread-1',
+      });
+
+      await expect(
+        chatStore.useChatStore
+          .getState()
+          .resumeApproval('interrupt-task-1', 'approve'),
+      ).rejects.toThrow('Resume failed');
+
+      expect(chatStore.useChatStore.getState().messages).toEqual([
+        createApprovalMessage(),
+      ]);
+      expect(chatStore.useChatStore.getState().errorMessage).toMatch(
+        /approval may have been received/i,
+      );
+      expect(chatStore.useChatStore.getState().isSending).toBe(false);
+      expect(
+        chatStore.useChatStore
+          .getState()
+          .messages.some((message) => message.status === 'streaming'),
+      ).toBe(false);
+    });
+
+    it('no-ops when the target message is not pending approval', async () => {
+      const { chatStore, langgraph } = loadChatModule();
+
+      chatStore.useChatStore.setState({
+        messages: [createApprovalMessage('approved')],
+        threadId: 'thread-1',
+      });
+
+      await chatStore.useChatStore
+        .getState()
+        .resumeApproval('interrupt-task-1', 'approve');
+
+      expect(langgraph.resumeRun).not.toHaveBeenCalled();
+      expect(langgraph.bootstrapThread).not.toHaveBeenCalled();
+      expect(chatStore.useChatStore.getState().messages).toEqual([
+        createApprovalMessage('approved'),
+      ]);
+    });
+
+    it('appends a new pending approval message when hydration chains into another interrupt', async () => {
+      const { chatStore, langgraph } = loadChatModule();
+      const nextInterrupt = {
+        action: 'delete_calendar_event',
+        current: { title: 'Follow-up' },
+        description: 'Approve the follow-up change.',
+        id: 'interrupt-task-2',
+        proposed: null,
+      };
+
+      jest.mocked(langgraph.resumeRun).mockResolvedValue(undefined);
+      jest.mocked(langgraph.bootstrapThread).mockResolvedValue({
+        messages: [
+          {
+            id: 'msg-1',
+            role: 'assistant',
+            text: 'One more step.',
+            timestamp: 1001,
+          },
+        ],
+        status: 'interrupted',
+      });
+      jest.mocked(langgraph.getThreadState).mockResolvedValue({
+        tasks: [{ id: 'task-2', interrupts: [{ value: nextInterrupt }] }],
+      });
+      jest
+        .mocked(langgraph.extractInterruptPayload)
+        .mockReturnValue(nextInterrupt);
+      chatStore.useChatStore.setState({
+        messages: [createApprovalMessage()],
+        threadId: 'thread-1',
+      });
+
+      await chatStore.useChatStore
+        .getState()
+        .resumeApproval('interrupt-task-1', 'approve');
+
+      expect(chatStore.useChatStore.getState().messages).toEqual([
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          text: 'One more step.',
+          timestamp: 1001,
+        },
+        {
+          id: 'interrupt-task-2',
+          interrupt: nextInterrupt,
+          role: 'assistant',
+          status: 'pending_approval',
+          text: 'Approve the follow-up change.',
+          timestamp: null,
+        },
+      ]);
+    });
+  });
+
   describe('hasPendingApproval', () => {
     it('returns false when there is no pending approval message', () => {
       const { chatStore } = loadChatModule();
@@ -502,16 +804,7 @@ describe('useChatStore', () => {
       const { chatStore } = loadChatModule();
 
       chatStore.useChatStore.setState({
-        messages: [
-          {
-            id: 'interrupt-task-1',
-            interrupt: createInterruptPayload(),
-            role: 'assistant',
-            status: 'pending_approval',
-            text: 'Approve the event update.',
-            timestamp: null,
-          },
-        ],
+        messages: [createApprovalMessage()],
       });
 
       expect(chatStore.useChatStore.getState().hasPendingApproval()).toBe(true);

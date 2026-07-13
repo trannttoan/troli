@@ -6,6 +6,8 @@ import {
   type HydratedChatMessage,
   getThreadState,
   type InterruptPayload,
+  resumeRun,
+  type ResumeRunInput,
   streamRun,
 } from '../services/langgraph';
 import { generateThreadId } from '../utils/thread';
@@ -29,6 +31,10 @@ type ChatState = {
   isBootstrapping: boolean;
   isSending: boolean;
   messages: ChatMessage[];
+  resumeApproval: (
+    messageId: string,
+    decision: ResumeRunInput['decision'],
+  ) => Promise<void>;
   threadId: string | null;
   reset: () => void;
   sendMessage: (text: string) => Promise<void>;
@@ -97,6 +103,95 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   isBootstrapping: false,
   isSending: false,
+  resumeApproval: async (messageId, decision) => {
+    const state = useChatStore.getState();
+    const approvalMessage = state.messages.find(
+      (message) => message.id === messageId,
+    );
+
+    if (approvalMessage?.status !== 'pending_approval') {
+      return;
+    }
+
+    const threadId = state.threadId;
+
+    if (!threadId) {
+      throw new Error('Thread is unavailable.');
+    }
+
+    const authState = useAuthStore.getState();
+    const accessToken = await authState.getValidToken();
+    const nextStatus = decision === 'approve' ? 'approved' : 'rejected';
+    const streamingAssistantId = createLocalMessageId('assistant');
+
+    set((currentState) => ({
+      errorMessage: null,
+      isSending: true,
+      messages: currentState.messages.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              status: nextStatus,
+            }
+          : message,
+      ),
+    }));
+
+    try {
+      await resumeRun({
+        accessToken,
+        decision,
+        onAssistantTextSnapshot: (text) => {
+          set((currentState) => ({
+            messages: upsertStreamingAssistantSnapshot(
+              currentState.messages,
+              streamingAssistantId,
+              text,
+            ),
+          }));
+        },
+        threadId,
+        timezone: getDeviceTimezone(),
+      });
+
+      const hydratedState = await hydrateMessagesForThread(threadId);
+
+      set({
+        ...hydratedState,
+        isSending: false,
+        threadId,
+      });
+    } catch (error) {
+      try {
+        const hydratedState = await hydrateMessagesForThread(threadId);
+
+        set({
+          ...hydratedState,
+          isSending: false,
+          threadId,
+        });
+        return;
+      } catch {
+        set((currentState) => ({
+          errorMessage:
+            'Your approval may have been received. Reopen the app once you are back online to reload the conversation.',
+          isSending: false,
+          messages: currentState.messages
+            .filter((message) => message.id !== streamingAssistantId)
+            .map((message) =>
+              message.id === messageId
+                ? {
+                    ...message,
+                    status: 'pending_approval',
+                  }
+                : message,
+            ),
+        }));
+      }
+
+      throw error;
+    }
+  },
   reset: () => {
     set(initialChatState);
   },
@@ -162,26 +257,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         timezone: getDeviceTimezone(),
       });
 
-      const hydratedMessages = await bootstrapRemoteThread(threadId);
-      let messages = normalizeMessages(hydratedMessages.messages);
-
-      if (hydratedMessages.status === 'interrupted') {
-        const interrupt = extractInterruptPayload(
-          await getThreadState(threadId),
-        );
-
-        if (interrupt) {
-          messages = upsertInterruptMessage(messages, interrupt);
-        }
-      }
-
       set({
-        errorMessage:
-          hydratedMessages.status === 'error'
-            ? 'The thread reported an error after streaming. Conversation history was reloaded and you can send another message.'
-            : null,
         isSending: false,
-        messages,
+        ...(await hydrateMessagesForThread(threadId)),
         threadId,
       });
     } catch (error) {
@@ -196,25 +274,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
 
       try {
-        const hydratedMessages = await bootstrapRemoteThread(threadId);
-        let messages = normalizeMessages(hydratedMessages.messages);
-
-        if (hydratedMessages.status === 'interrupted') {
-          const interrupt = extractInterruptPayload(
-            await getThreadState(threadId),
-          );
-
-          if (interrupt) {
-            messages = upsertInterruptMessage(messages, interrupt);
-          }
-        }
-
         set({
-          errorMessage:
-            hydratedMessages.status === 'error'
-              ? 'The thread reported an error after streaming. Conversation history was reloaded and you can send another message.'
-              : null,
-          messages,
+          ...(await hydrateMessagesForThread(threadId)),
           threadId,
         });
         return;
@@ -236,6 +297,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
 export function resetChatState() {
   useChatStore.getState().reset();
+}
+
+async function hydrateMessagesForThread(
+  threadId: string,
+): Promise<Pick<ChatState, 'errorMessage' | 'messages'>> {
+  const hydratedMessages = await bootstrapRemoteThread(threadId);
+  let messages = normalizeMessages(hydratedMessages.messages);
+
+  if (hydratedMessages.status === 'interrupted') {
+    const interrupt = extractInterruptPayload(await getThreadState(threadId));
+
+    if (interrupt) {
+      messages = upsertInterruptMessage(messages, interrupt);
+    }
+  }
+
+  return {
+    errorMessage:
+      hydratedMessages.status === 'error'
+        ? 'The thread reported an error after streaming. Conversation history was reloaded and you can send another message.'
+        : null,
+    messages,
+  };
 }
 
 function normalizeMessages(messages: HydratedChatMessage[]): ChatMessage[] {
