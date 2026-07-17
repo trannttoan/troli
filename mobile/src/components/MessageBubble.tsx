@@ -9,9 +9,7 @@ type MessageBubbleProps = {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
-  const isApprovalMessage = Boolean(message.interrupt);
-
-  if (isApprovalMessage && message.interrupt) {
+  if (message.interrupt) {
     const approvalMessage = message as ChatMessage & {
       interrupt: NonNullable<ChatMessage['interrupt']>;
     };
@@ -47,8 +45,8 @@ const styles = StyleSheet.create({
     borderColor: '#d8cec0',
   },
   assistantRow: {
-    width: '100%',
     justifyContent: 'flex-start',
+    width: '100%',
   },
   assistantText: {
     color: '#1f2a24',
