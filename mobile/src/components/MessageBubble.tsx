@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { ApprovalCard } from './ApprovalCard';
 import type { ChatMessage } from '../store/chat';
 
 type MessageBubbleProps = {
@@ -8,6 +9,19 @@ type MessageBubbleProps = {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
+  const isApprovalMessage = Boolean(message.interrupt);
+
+  if (isApprovalMessage && message.interrupt) {
+    const approvalMessage = message as ChatMessage & {
+      interrupt: NonNullable<ChatMessage['interrupt']>;
+    };
+
+    return (
+      <View style={[styles.row, styles.assistantRow]}>
+        <ApprovalCard message={approvalMessage} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.row, isUser ? styles.userRow : styles.assistantRow]}>
@@ -33,6 +47,7 @@ const styles = StyleSheet.create({
     borderColor: '#d8cec0',
   },
   assistantRow: {
+    width: '100%',
     justifyContent: 'flex-start',
   },
   assistantText: {
