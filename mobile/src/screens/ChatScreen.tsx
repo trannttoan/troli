@@ -33,6 +33,9 @@ export function ChatScreen() {
   const isBootstrapping = useChatStore((state) => state.isBootstrapping);
   const isSending = useChatStore((state) => state.isSending);
   const messages = useChatStore((state) => state.messages);
+  const hasPendingApproval = messages.some(
+    (message) => message.status === 'pending_approval',
+  );
   const hasStreamingMessage = messages.some((m) => m.status === 'streaming');
   const sendMessage = useChatStore((state) => state.sendMessage);
   const signOut = useAuthStore((state) => state.signOut);
@@ -142,7 +145,12 @@ export function ChatScreen() {
 
             <View style={styles.inputWrap}>
               <ChatInput
-                disabled={isBootstrapping || isSending || !isConnected}
+                disabled={
+                  isBootstrapping ||
+                  isSending ||
+                  hasPendingApproval ||
+                  !isConnected
+                }
                 onSend={(text) => sendMessage(text)}
               />
             </View>
