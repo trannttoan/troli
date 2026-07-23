@@ -202,7 +202,7 @@ function formatCalendarEvents(events: CalendarEvent[]): string {
       ? ` @ ${event.location.trim()}`
       : '';
 
-    return `- ${formatEventDateRange(event)} — ${summary}${location}`;
+    return `- ${formatEventDateRange(event)} — ${summary}${location} (id: ${event.id})`;
   });
 
   return `Calendar events:\n${lines.join('\n')}`;

@@ -69,8 +69,9 @@ describe('listCalendarEvents', () => {
     );
 
     expect(result).toContain('Calendar events:');
-    expect(result).toContain('Team Sync @ Conference Room');
+    expect(result).toContain('Team Sync @ Conference Room (id: event-1)');
     expect(result).toContain('2026-01-17 (all day)');
+    expect(result).toContain('(id: event-2)');
     expect(fetchWithAuth).toHaveBeenCalledWith(
       'https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=2026-01-16T00%3A00%3A00-05%3A00&timeMax=2026-01-18T00%3A00%3A00-05%3A00&q=team',
       expect.objectContaining({ method: 'GET' }),
