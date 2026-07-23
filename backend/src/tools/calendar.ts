@@ -18,6 +18,7 @@ type CalendarEvent = {
   location?: string;
   start?: CalendarEventDateTime;
   end?: CalendarEventDateTime;
+  recurringEventId?: string;
 };
 
 type CalendarEventAttendee = {
@@ -27,7 +28,7 @@ type CalendarEventAttendee = {
 type DetailedCalendarEvent = CalendarEvent & {
   description?: string;
   attendees?: CalendarEventAttendee[];
-  recurringEventId?: string;
+  recurrence?: string[];
   status?: string;
   htmlLink?: string;
 };
@@ -202,7 +203,9 @@ function formatCalendarEvents(events: CalendarEvent[]): string {
       ? ` @ ${event.location.trim()}`
       : '';
 
-    return `- ${formatEventDateRange(event)} — ${summary}${location} (id: ${event.id})`;
+    const recurring = event.recurringEventId ? ', recurring' : '';
+
+    return `- ${formatEventDateRange(event)} — ${summary}${location} (id: ${event.id}${recurring})`;
   });
 
   return `Calendar events:\n${lines.join('\n')}`;
@@ -230,6 +233,10 @@ function formatEventDetail(event: DetailedCalendarEvent): string {
 
   if (attendeeEmails.length > 0) {
     lines.push(`Attendees: ${attendeeEmails.join(', ')}`);
+  }
+
+  if (event.recurringEventId || event.recurrence?.length) {
+    lines.push('Recurring: yes');
   }
 
   if (status) {

@@ -52,6 +52,13 @@ describe('listCalendarEvents', () => {
           start: { date: '2026-01-17' },
           end: { date: '2026-01-18' },
         },
+        {
+          id: 'event-3_20260118T140000Z',
+          summary: 'Daily Standup',
+          recurringEventId: 'event-3',
+          start: { dateTime: '2026-01-18T09:00:00-05:00' },
+          end: { dateTime: '2026-01-18T09:15:00-05:00' },
+        },
       ],
     });
 
@@ -72,6 +79,9 @@ describe('listCalendarEvents', () => {
     expect(result).toContain('Team Sync @ Conference Room (id: event-1)');
     expect(result).toContain('2026-01-17 (all day)');
     expect(result).toContain('(id: event-2)');
+    expect(result).toContain(
+      'Daily Standup (id: event-3_20260118T140000Z, recurring)',
+    );
     expect(fetchWithAuth).toHaveBeenCalledWith(
       'https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=2026-01-16T00%3A00%3A00-05%3A00&timeMax=2026-01-18T00%3A00%3A00-05%3A00&q=team',
       expect.objectContaining({ method: 'GET' }),
@@ -133,6 +143,7 @@ describe('getCalendarEvent', () => {
       location: 'HQ',
       description: 'Review roadmap and assign owners.',
       attendees: [{ email: 'lead@example.com' }, { email: 'pm@example.com' }],
+      recurringEventId: 'abc-series',
       status: 'confirmed',
       htmlLink: 'https://calendar.google.com/calendar/event?eid=abc',
       start: { date: '2026-02-10' },
@@ -153,6 +164,7 @@ describe('getCalendarEvent', () => {
     expect(result).toContain('Location: HQ');
     expect(result).toContain('Description: Review roadmap and assign owners.');
     expect(result).toContain('Attendees: lead@example.com, pm@example.com');
+    expect(result).toContain('Recurring: yes');
     expect(result).toContain('Status: confirmed');
     expect(result).toContain(
       'Link: https://calendar.google.com/calendar/event?eid=abc',
@@ -189,6 +201,28 @@ describe('getCalendarEvent', () => {
     expect(result).not.toContain('Location:');
     expect(result).not.toContain('Description:');
     expect(result).not.toContain('Attendees:');
+    expect(result).not.toContain('Recurring:');
+  });
+
+  it('marks a recurring series master event as recurring', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      id: 'series-master',
+      summary: 'Daily Standup',
+      recurrence: ['RRULE:FREQ=DAILY'],
+      start: { dateTime: '2026-01-16T09:00:00-05:00' },
+      end: { dateTime: '2026-01-16T09:15:00-05:00' },
+    });
+
+    const result = await getCalendarEvent.invoke(
+      { eventId: 'series-master' },
+      {
+        configurable: {
+          access_token: 'calendar-access-token',
+        },
+      },
+    );
+
+    expect(result).toContain('Recurring: yes');
   });
 
   it('returns a friendly not-found message when the Google API responds with 404', async () => {
