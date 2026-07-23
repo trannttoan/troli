@@ -83,7 +83,7 @@ describe('listCalendarEvents', () => {
       'Daily Standup (id: event-3_20260118T140000Z, recurring)',
     );
     expect(fetchWithAuth).toHaveBeenCalledWith(
-      'https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=2026-01-16T00%3A00%3A00-05%3A00&timeMax=2026-01-18T00%3A00%3A00-05%3A00&q=team',
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=2026-01-16T00%3A00%3A00-05%3A00&timeMax=2026-01-18T00%3A00%3A00-05%3A00&q=team',
       expect.objectContaining({ method: 'GET' }),
       'calendar-access-token',
     );
@@ -102,6 +102,48 @@ describe('listCalendarEvents', () => {
         },
       ),
     ).resolves.toBe('No calendar events found.');
+  });
+
+  it('appends a truncation notice when the response has more pages', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      items: [
+        {
+          id: 'event-1',
+          summary: 'Team Sync',
+          start: { dateTime: '2026-01-16T09:00:00-05:00' },
+          end: { dateTime: '2026-01-16T09:30:00-05:00' },
+        },
+      ],
+      nextPageToken: 'next-page-token',
+    });
+
+    const result = await listCalendarEvents.invoke(
+      {},
+      { configurable: { access_token: 'calendar-access-token' } },
+    );
+
+    expect(result).toContain('Team Sync');
+    expect(result).toContain('only the first 250 events are shown');
+  });
+
+  it('omits the truncation notice when the response has a single page', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      items: [
+        {
+          id: 'event-1',
+          summary: 'Team Sync',
+          start: { dateTime: '2026-01-16T09:00:00-05:00' },
+          end: { dateTime: '2026-01-16T09:30:00-05:00' },
+        },
+      ],
+    });
+
+    const result = await listCalendarEvents.invoke(
+      {},
+      { configurable: { access_token: 'calendar-access-token' } },
+    );
+
+    expect(result).not.toContain('only the first 250 events are shown');
   });
 
   it('formats a multi-day all-day event with inclusive end date', async () => {

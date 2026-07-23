@@ -77,7 +77,10 @@ type UpdateCalendarEventRequestBody = {
 
 type ListCalendarEventsResponse = {
   items?: CalendarEvent[];
+  nextPageToken?: string;
 };
+
+const MAX_LIST_RESULTS = 250;
 
 function getAccessToken(config: LangGraphRunnableConfig): string {
   const configurable = config.configurable as
@@ -110,6 +113,7 @@ function buildListCalendarEventsUrl(input: {
 
   url.searchParams.set('singleEvents', 'true');
   url.searchParams.set('orderBy', 'startTime');
+  url.searchParams.set('maxResults', String(MAX_LIST_RESULTS));
 
   if (input.timeMin) {
     url.searchParams.set('timeMin', input.timeMin);
@@ -731,7 +735,13 @@ export const listCalendarEvents = tool(
       accessToken,
     );
 
-    return formatCalendarEvents(response?.items ?? []);
+    const formatted = formatCalendarEvents(response?.items ?? []);
+
+    if (response?.nextPageToken) {
+      return `${formatted}\n\nNote: only the first ${MAX_LIST_RESULTS} events are shown; more events exist in this range. Tell the user the list is incomplete, and narrow the time range or add a search query to see the rest.`;
+    }
+
+    return formatted;
   },
   {
     name: 'list_calendar_events',
