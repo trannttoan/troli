@@ -2,7 +2,7 @@ packages:
   - 'mobile'
   - 'backend'
 allowBuilds:
-  '@langgraphjs/toolkit': true
+  '@langgraphjs/toolkit': set this to true or false
   esbuild: true
   msgpackr-extract: true
 minimumReleaseAgeExclude:
