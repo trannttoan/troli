@@ -200,6 +200,21 @@ These verify the state channel refactor didn't break existing functionality.
 
 ---
 
+## N. Chat Scroll Anchoring (Inverted List)
+
+| #   | Scenario                               | Steps                                                                                                                     | Expected                                                                                                                                     | Status |
+| --- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| N1  | Open app with existing history         | 1. Have a multi-turn conversation long enough to overflow the screen. 2. Kill app. 3. Reopen.                             | List opens scrolled to the newest message at the bottom — not at the oldest. No visible jump or auto-scroll animation after the first paint. | TODO   |
+| N2  | Typing indicator visible on send       | 1. Scroll to the bottom. 2. Send a message.                                                                               | User bubble and the typing indicator (dots) both appear at the bottom without any manual scrolling. Indicator sits below the last message.   | TODO   |
+| N3  | Streaming pins to bottom               | 1. Stay at the bottom. 2. Send a message that produces a long response.                                                   | As the assistant bubble grows, the view stays pinned to the bottom of the streaming text. No stutter, no drift upward.                       | TODO   |
+| N4  | Approval card scrolls into view        | 1. Stay at the bottom. 2. Trigger an update or delete approval (see section K).                                           | The approval card is fully visible at the bottom when it appears. Approve/Reject buttons reachable without scrolling.                        | TODO   |
+| N5  | No yank when scrolled up mid-stream    | 1. Send a message that produces a long response. 2. While it streams, scroll up to read earlier messages.                 | The list stays where the user put it. Streaming growth does not drag the view back to the bottom. Scrolling back down still reaches the end. | TODO   |
+| N6  | Empty thread renders upright           | 1. Sign in with an account that has no chat history (or clear the thread). 2. Observe the message list.                   | Empty state ("Walking skeleton is live") renders right-side-up — not mirrored — and stays centered in the list area.                         | TODO   |
+| N7  | Keyboard open/close with inverted list | 1. Tap the input to open the keyboard. 2. Observe the message list. 3. Dismiss the keyboard by scrolling or tapping away. | Messages shift up with the keyboard and the newest stays visible above the input. No content hidden behind the keyboard, no double inset.    | TODO   |
+| N8  | Message order preserved after invert   | 1. Have a multi-turn conversation. 2. Scroll from the newest message to the oldest.                                       | Messages read oldest at the top to newest at the bottom. No reversed or interleaved ordering. Timestamps ascend downward.                    | TODO   |
+
+---
+
 ## Extending This Plan
 
 - **Slice 4 (delete + reopen hydration):** Add delete approval flow, app reopen with pending interrupt, duplicate approval card dedup on bootstrap, and L11 (proposed null rendering).
