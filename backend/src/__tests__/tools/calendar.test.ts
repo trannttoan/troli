@@ -827,6 +827,64 @@ describe('updateCalendarEvent', () => {
     expect(fetchWithAuth).toHaveBeenCalledTimes(1);
   });
 
+  it('returns a deleted-event message without interrupting when the event is cancelled', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      id: 'event-cancelled',
+      summary: 'Trashed Event',
+      status: 'cancelled',
+      start: { dateTime: '2026-07-01T14:00:00-04:00' },
+      end: { dateTime: '2026-07-01T15:00:00-04:00' },
+    });
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    await expect(
+      updateCalendarEvent.invoke(
+        {
+          eventId: 'event-cancelled',
+          summary: 'Updated Title',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe(
+      "Event 'event-cancelled' has been deleted, so it cannot be updated.",
+    );
+
+    expect(interrupt).not.toHaveBeenCalled();
+    expect(fetchWithAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports an unverified update when the patch response body is empty', async () => {
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({
+        id: 'event-3',
+        summary: 'Team Sync',
+        start: { dateTime: '2026-03-10T09:00:00-05:00' },
+        end: { dateTime: '2026-03-10T09:30:00-05:00' },
+      })
+      .mockResolvedValueOnce(null);
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    await expect(
+      updateCalendarEvent.invoke(
+        {
+          eventId: 'event-3',
+          summary: 'Team Standup',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe(
+      "The update request for event 'event-3' completed, but Google did not return the updated event. Ask the user to verify the change in their calendar.",
+    );
+  });
+
   it('returns a friendly message when the event is deleted between interrupt and resume', async () => {
     vi.mocked(fetchWithAuth)
       .mockResolvedValueOnce({
@@ -860,7 +918,7 @@ describe('updateCalendarEvent', () => {
         },
       ),
     ).resolves.toBe(
-      "No event found with ID 'event-deleted'. It may have been deleted while waiting for approval.",
+      "No event found with ID 'event-deleted'. It may no longer exist.",
     );
 
     expect(interrupt).toHaveBeenCalled();

@@ -859,6 +859,10 @@ export const updateCalendarEvent = tool(
       throw error;
     }
 
+    if (currentEvent.status === 'cancelled') {
+      return `Event '${input.eventId}' has been deleted, so it cannot be updated.`;
+    }
+
     const proposed = toProposedUpdateSnapshot(input);
     const decision = interrupt<
       {
@@ -900,17 +904,17 @@ export const updateCalendarEvent = tool(
       );
     } catch (error) {
       if (error instanceof GoogleApiError && error.status === 404) {
-        return `No event found with ID '${targetEventId}'. It may have been deleted while waiting for approval.`;
+        return `No event found with ID '${targetEventId}'. It may no longer exist.`;
       }
 
       throw error;
     }
 
-    return formatEventDetail(
-      event ?? {
-        id: targetEventId,
-      },
-    );
+    if (!event) {
+      return `The update request for event '${targetEventId}' completed, but Google did not return the updated event. Ask the user to verify the change in their calendar.`;
+    }
+
+    return formatEventDetail(event);
   },
   {
     name: 'update_calendar_event',
