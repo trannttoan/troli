@@ -45,6 +45,9 @@ export function ChatScreen() {
   const isConfigured = isLangGraphConfigured();
   const missingConfig = useMemo(() => getMissingLangGraphConfig(), []);
   const keyboardVerticalOffset = Platform.OS === 'ios' ? insets.top + 56 : 0;
+  // The list renders inverted so it anchors at the newest message; the store
+  // keeps messages chronological, so reverse only at the render boundary.
+  const listData = useMemo(() => [...messages].reverse(), [messages]);
 
   useEffect(() => {
     if (!isConfigured || hasBootstrappedRef.current) {
@@ -118,7 +121,8 @@ export function ChatScreen() {
             <FlatList
               automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
               contentContainerStyle={styles.listContent}
-              data={messages}
+              data={listData}
+              inverted
               keyExtractor={(item) => item.id}
               keyboardDismissMode={
                 Platform.OS === 'ios' ? 'interactive' : 'on-drag'
@@ -134,9 +138,13 @@ export function ChatScreen() {
                   </Text>
                 </View>
               }
-              ListFooterComponent={
+              ListHeaderComponent={
                 isSending && !hasStreamingMessage ? <TypingIndicator /> : null
               }
+              maintainVisibleContentPosition={{
+                autoscrollToTopThreshold: 80,
+                minIndexForVisible: 0,
+              }}
               onScrollBeginDrag={() => {
                 Keyboard.dismiss();
               }}
@@ -190,6 +198,8 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 20,
     paddingVertical: 48,
+    // Counter-flip the inverted list's scaleY transform.
+    transform: [{ scaleY: -1 }],
   },
   emptyTitle: {
     color: '#1f2a24',
@@ -241,8 +251,9 @@ const styles = StyleSheet.create({
   listContent: {
     flexGrow: 1,
     gap: 12,
+    paddingBottom: 18,
     paddingHorizontal: 16,
-    paddingTop: 18,
+    paddingTop: 10,
   },
   loadingBody: {
     color: '#61584d',
