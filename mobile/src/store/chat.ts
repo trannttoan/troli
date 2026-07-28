@@ -67,6 +67,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       const result = await bootstrapRemoteThread(threadId);
+      let messages = normalizeMessages(result.messages);
+
+      if (result.status === 'interrupted') {
+        const interrupt = extractInterruptPayload(
+          await getThreadState(threadId),
+        );
+
+        if (interrupt) {
+          messages = upsertInterruptMessage(messages, interrupt);
+        }
+      }
 
       set({
         errorMessage:
@@ -74,7 +85,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ? 'The previous run did not settle cleanly. Conversation history was reloaded and you can send another message.'
             : null,
         isBootstrapping: false,
-        messages: normalizeMessages(result.messages),
+        messages,
         threadId,
       });
     } catch (error) {

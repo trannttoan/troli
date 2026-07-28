@@ -173,6 +173,49 @@ describe('useChatStore', () => {
         /did not settle cleanly/,
       );
     });
+
+    it('appends a pending approval message when bootstrap reports interrupted status', async () => {
+      const { chatStore, langgraph } = loadChatModule();
+      const interrupt = createInterruptPayload();
+      const threadState = {
+        tasks: [{ id: 'task-1', interrupts: [{ value: interrupt }] }],
+      };
+
+      jest.mocked(langgraph.bootstrapThread).mockResolvedValue({
+        messages: [
+          { id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 },
+          {
+            id: 'msg-2',
+            role: 'assistant',
+            text: 'Need approval',
+            timestamp: 1001,
+          },
+        ],
+        status: 'interrupted',
+      });
+      jest.mocked(langgraph.getThreadState).mockResolvedValue(threadState);
+      jest.mocked(langgraph.extractInterruptPayload).mockReturnValue(interrupt);
+
+      await chatStore.useChatStore.getState().bootstrapThread();
+
+      expect(langgraph.getThreadState).toHaveBeenCalledWith(
+        'deterministic-thread-id',
+      );
+      expect(langgraph.extractInterruptPayload).toHaveBeenCalledWith(
+        threadState,
+      );
+      expect(chatStore.useChatStore.getState().messages).toEqual([
+        { id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          text: 'Need approval',
+          timestamp: 1001,
+        },
+        createApprovalMessage(),
+      ]);
+      expect(chatStore.useChatStore.getState().hasPendingApproval()).toBe(true);
+    });
   });
 
   describe('sendMessage', () => {
