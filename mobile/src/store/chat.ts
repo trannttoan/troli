@@ -40,6 +40,8 @@ type ChatState = {
   sendMessage: (text: string) => Promise<void>;
 };
 
+const LOCAL_MESSAGE_ID_PREFIX = 'local-';
+
 const initialChatState = {
   errorMessage: null as string | null,
   isBootstrapping: false,
@@ -314,7 +316,10 @@ async function hydrateMessagesForThread(
   threadId: string,
 ): Promise<Pick<ChatState, 'errorMessage' | 'messages'>> {
   const hydratedMessages = await bootstrapRemoteThread(threadId);
-  let messages = normalizeMessages(hydratedMessages.messages);
+  let messages = preserveLocalMessageIds(
+    useChatStore.getState().messages,
+    normalizeMessages(hydratedMessages.messages),
+  );
 
   if (hydratedMessages.status === 'interrupted') {
     const interrupt = extractInterruptPayload(await getThreadState(threadId));
@@ -340,6 +345,28 @@ function normalizeMessages(messages: HydratedChatMessage[]): ChatMessage[] {
     text: message.text,
     timestamp: message.timestamp,
   }));
+}
+
+/**
+ * Message ids are the chat list's React keys. Hydration swaps the locally
+ * generated ids of the messages it just streamed for canonical server ids,
+ * which remounts those cells — and the inverted list reads a remounted cell at
+ * its scroll anchor as a layout change, answering with an animated scroll to
+ * the bottom the user never asked for. Keep the local id when the hydrated
+ * message lands in the same slot with the same role so the cell stays mounted.
+ */
+function preserveLocalMessageIds(
+  existing: ChatMessage[],
+  hydrated: ChatMessage[],
+): ChatMessage[] {
+  return hydrated.map((message, index) => {
+    const previous = existing[index];
+
+    return previous?.role === message.role &&
+      previous.id.startsWith(LOCAL_MESSAGE_ID_PREFIX)
+      ? { ...message, id: previous.id }
+      : message;
+  });
 }
 
 function upsertInterruptMessage(
@@ -396,7 +423,8 @@ function upsertStreamingAssistantSnapshot(
 }
 
 function createLocalMessageId(role: ChatMessage['role']): string {
-  return `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const suffix = Math.random().toString(36).slice(2, 10);
+  return `${LOCAL_MESSAGE_ID_PREFIX}${role}-${Date.now()}-${suffix}`;
 }
 
 function getDeviceTimezone(): string {
