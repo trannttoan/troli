@@ -294,6 +294,54 @@ describe('useChatStore', () => {
       expect(langgraph.getThreadState).not.toHaveBeenCalled();
     });
 
+    it('keeps the streamed messages on their local ids after hydration', async () => {
+      const { chatStore, langgraph } = loadChatModule();
+      let streamedIds: string[] = [];
+
+      jest.mocked(langgraph.streamRun).mockImplementation(async (input) => {
+        await input.onAssistantTextSnapshot?.('Hi there');
+        streamedIds = chatStore.useChatStore
+          .getState()
+          .messages.map((message) => message.id);
+      });
+      jest.mocked(langgraph.bootstrapThread).mockResolvedValue({
+        messages: [
+          { id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 },
+          { id: 'msg-2', role: 'assistant', text: 'Hi there', timestamp: 1001 },
+        ],
+        status: 'idle',
+      });
+      chatStore.useChatStore.setState({ threadId: 'thread-1' });
+
+      await chatStore.useChatStore.getState().sendMessage('Hello');
+
+      const state = chatStore.useChatStore.getState();
+
+      expect(streamedIds).toHaveLength(2);
+      expect(state.messages.map((message) => message.id)).toEqual(streamedIds);
+      expect(state.messages[1]?.status).toBeUndefined();
+    });
+
+    it('adopts server ids for messages that were not rendered locally', async () => {
+      const { chatStore, langgraph } = loadChatModule();
+
+      jest.mocked(langgraph.streamRun).mockResolvedValue(undefined);
+      jest.mocked(langgraph.bootstrapThread).mockResolvedValue({
+        messages: [
+          { id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 },
+          { id: 'msg-2', role: 'assistant', text: 'Hi there', timestamp: 1001 },
+        ],
+        status: 'idle',
+      });
+      chatStore.useChatStore.setState({ threadId: 'thread-1' });
+
+      await chatStore.useChatStore.getState().sendMessage('Hello');
+
+      const state = chatStore.useChatStore.getState();
+
+      expect(state.messages[1]?.id).toBe('msg-2');
+    });
+
     it('appends a pending approval message when hydration reports interrupted status', async () => {
       const { chatStore, langgraph } = loadChatModule();
       const interrupt = createInterruptPayload();
@@ -325,7 +373,12 @@ describe('useChatStore', () => {
         threadState,
       );
       expect(chatStore.useChatStore.getState().messages).toEqual([
-        { id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 },
+        {
+          id: expect.stringMatching(/^local-user-/) as string,
+          role: 'user',
+          text: 'Hello',
+          timestamp: 1000,
+        },
         {
           id: 'msg-2',
           role: 'assistant',
@@ -389,7 +442,12 @@ describe('useChatStore', () => {
       await chatStore.useChatStore.getState().sendMessage('Hello');
 
       expect(chatStore.useChatStore.getState().messages).toEqual([
-        { id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 },
+        {
+          id: expect.stringMatching(/^local-user-/) as string,
+          role: 'user',
+          text: 'Hello',
+          timestamp: 1000,
+        },
         {
           id: 'interrupt-task-1',
           interrupt,
@@ -622,7 +680,7 @@ describe('useChatStore', () => {
       expect(chatStore.useChatStore.getState().messages).toEqual([
         { id: 'msg-1', role: 'user', text: 'Approve this', timestamp: 1000 },
         {
-          id: 'msg-2',
+          id: expect.stringMatching(/^local-assistant-/) as string,
           role: 'assistant',
           text: 'Approved.',
           timestamp: 1001,
