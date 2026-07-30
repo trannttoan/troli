@@ -25,6 +25,7 @@ vi.mock('../../utils/google-api.js', async (importOriginal) => {
 
 import {
   createCalendarEvent,
+  deleteCalendarEvent,
   getCalendarEvent,
   listCalendarEvents,
   updateCalendarEvent,
@@ -1004,6 +1005,277 @@ describe('updateCalendarEvent', () => {
         { configurable: { access_token: 'calendar-access-token' } },
       ),
     ).rejects.toThrow('endDateTime must be after startDateTime.');
+
+    expect(fetchWithAuth).not.toHaveBeenCalled();
+  });
+});
+
+describe('deleteCalendarEvent', () => {
+  it('interrupts for approval, deletes the event, and returns a confirmation', async () => {
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({
+        id: 'event-1',
+        summary: 'Team Sync',
+        location: 'Room 1',
+        description: 'Weekly sync.',
+        attendees: [{ email: 'lead@example.com' }],
+        start: { dateTime: '2026-03-10T09:00:00-05:00' },
+        end: { dateTime: '2026-03-10T09:30:00-05:00' },
+      })
+      .mockResolvedValueOnce(null);
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    const result = await deleteCalendarEvent.invoke(
+      {
+        eventId: 'event-1',
+      },
+      {
+        configurable: {
+          access_token: 'calendar-access-token',
+        },
+      },
+    );
+
+    expect(interrupt).toHaveBeenCalledWith({
+      action: 'delete_calendar_event',
+      description: 'Delete "Team Sync".',
+      current: {
+        eventId: 'event-1',
+        recurringEventId: undefined,
+        summary: 'Team Sync',
+        startDateTime: '2026-03-10T09:00:00-05:00',
+        endDateTime: '2026-03-10T09:30:00-05:00',
+        startDate: undefined,
+        endDate: undefined,
+        location: 'Room 1',
+        description: 'Weekly sync.',
+        attendees: ['lead@example.com'],
+      },
+      proposed: null,
+    });
+    expect(fetchWithAuth).toHaveBeenNthCalledWith(
+      1,
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/event-1',
+      expect.objectContaining({ method: 'GET' }),
+      'calendar-access-token',
+    );
+    expect(fetchWithAuth).toHaveBeenNthCalledWith(
+      2,
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/event-1',
+      {
+        method: 'DELETE',
+      },
+      'calendar-access-token',
+    );
+    expect(result).toBe('Deleted "Team Sync".');
+  });
+
+  it('returns a cancellation message when the deletion is rejected', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      id: 'event-2',
+      summary: 'Planning',
+      start: { date: '2026-04-01' },
+      end: { date: '2026-04-02' },
+    });
+    vi.mocked(interrupt).mockReturnValue('reject');
+
+    await expect(
+      deleteCalendarEvent.invoke(
+        {
+          eventId: 'event-2',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe('Deletion cancelled.');
+
+    expect(fetchWithAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses recurringEventId when deleting the full recurring series', async () => {
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({
+        id: 'instance-1',
+        recurringEventId: 'series-1',
+        summary: '1:1',
+        start: { dateTime: '2026-05-01T10:00:00-04:00' },
+        end: { dateTime: '2026-05-01T10:30:00-04:00' },
+      })
+      .mockResolvedValueOnce(null);
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    await expect(
+      deleteCalendarEvent.invoke(
+        {
+          eventId: 'instance-1',
+          recurringEventScope: 'all',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe('Deleted "1:1" (all instances).');
+
+    expect(interrupt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Delete "1:1" (all instances).',
+        proposed: null,
+      }),
+    );
+    expect(fetchWithAuth).toHaveBeenNthCalledWith(
+      2,
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/series-1',
+      expect.objectContaining({ method: 'DELETE' }),
+      'calendar-access-token',
+    );
+  });
+
+  it('falls back to the provided eventId when recurring scope is all on a non-recurring event', async () => {
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({
+        id: 'event-3',
+        summary: 'Deep Work',
+        start: { date: '2026-06-02' },
+        end: { date: '2026-06-03' },
+      })
+      .mockResolvedValueOnce(null);
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    await expect(
+      deleteCalendarEvent.invoke(
+        {
+          eventId: 'event-3',
+          recurringEventScope: 'all',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe('Deleted "Deep Work".');
+
+    expect(interrupt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Delete "Deep Work".',
+      }),
+    );
+    expect(fetchWithAuth).toHaveBeenNthCalledWith(
+      2,
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events/event-3',
+      expect.objectContaining({ method: 'DELETE' }),
+      'calendar-access-token',
+    );
+  });
+
+  it('returns a friendly not-found message when the event does not exist', async () => {
+    vi.mocked(fetchWithAuth).mockRejectedValue(
+      new GoogleApiError(
+        'GOOGLE_API_REQUEST_FAILED',
+        'Google API request failed with status 404.',
+        {
+          retryable: false,
+          status: 404,
+        },
+      ),
+    );
+
+    await expect(
+      deleteCalendarEvent.invoke(
+        {
+          eventId: 'missing-event',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe("No event found with ID 'missing-event'.");
+
+    expect(interrupt).not.toHaveBeenCalled();
+    expect(fetchWithAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns an already-deleted message without interrupting when the event is cancelled', async () => {
+    vi.mocked(fetchWithAuth).mockResolvedValue({
+      id: 'event-cancelled',
+      summary: 'Trashed Event',
+      status: 'cancelled',
+      start: { dateTime: '2026-07-01T14:00:00-04:00' },
+      end: { dateTime: '2026-07-01T15:00:00-04:00' },
+    });
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    await expect(
+      deleteCalendarEvent.invoke(
+        {
+          eventId: 'event-cancelled',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe('Event "Trashed Event" has already been deleted.');
+
+    expect(interrupt).not.toHaveBeenCalled();
+    expect(fetchWithAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a friendly message when the event is deleted between interrupt and resume', async () => {
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({
+        id: 'event-deleted',
+        summary: 'Doomed Event',
+        start: { dateTime: '2026-07-01T14:00:00-04:00' },
+        end: { dateTime: '2026-07-01T15:00:00-04:00' },
+      })
+      .mockRejectedValueOnce(
+        new GoogleApiError(
+          'GOOGLE_API_REQUEST_FAILED',
+          'Google API request failed with status 404.',
+          {
+            retryable: false,
+            status: 404,
+          },
+        ),
+      );
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    await expect(
+      deleteCalendarEvent.invoke(
+        {
+          eventId: 'event-deleted',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe(
+      "No event found with ID 'event-deleted'. It may no longer exist.",
+    );
+
+    expect(interrupt).toHaveBeenCalled();
+    expect(fetchWithAuth).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects when the access token is missing from the run config', async () => {
+    await expect(
+      deleteCalendarEvent.invoke({ eventId: 'event-9' }, {}),
+    ).rejects.toMatchObject<TroliAuthError>({
+      code: 'AUTH_MISSING_ACCESS_TOKEN',
+      retryable: false,
+      status: 401,
+    });
 
     expect(fetchWithAuth).not.toHaveBeenCalled();
   });
