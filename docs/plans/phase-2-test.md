@@ -229,6 +229,4 @@ These verify the state channel refactor didn't break existing functionality.
 
 ## Extending This Plan
 
-- **Slice 4 (delete + reopen hydration):** Add delete approval flow, app reopen with pending interrupt, duplicate approval card dedup on bootstrap, and L11 (proposed null rendering).
-
 Each new slice's tests layer on top -- run the regression sections (B, F) after every slice to catch breakage.
