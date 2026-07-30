@@ -926,6 +926,43 @@ describe('updateCalendarEvent', () => {
     expect(fetchWithAuth).toHaveBeenCalledTimes(2);
   });
 
+  it('treats a 410 on the patch call as a missing event', async () => {
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({
+        id: 'event-gone',
+        summary: 'Doomed Event',
+        start: { dateTime: '2026-07-01T14:00:00-04:00' },
+        end: { dateTime: '2026-07-01T15:00:00-04:00' },
+      })
+      .mockRejectedValueOnce(
+        new GoogleApiError(
+          'GOOGLE_API_REQUEST_FAILED',
+          'Google API request failed with status 410.',
+          {
+            retryable: false,
+            status: 410,
+          },
+        ),
+      );
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    await expect(
+      updateCalendarEvent.invoke(
+        {
+          eventId: 'event-gone',
+          summary: 'Updated Title',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe(
+      "No event found with ID 'event-gone'. It may no longer exist.",
+    );
+  });
+
   it('rejects when no update fields are provided', async () => {
     await expect(
       updateCalendarEvent.invoke(
@@ -1262,6 +1299,45 @@ describe('deleteCalendarEvent', () => {
       ),
     ).resolves.toBe(
       "No event found with ID 'event-deleted'. It may no longer exist.",
+    );
+
+    expect(interrupt).toHaveBeenCalled();
+    expect(fetchWithAuth).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats a 410 on the delete call as an already-deleted event', async () => {
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({
+        id: 'event-gone',
+        summary: 'Doomed Event',
+        start: { dateTime: '2026-07-01T14:00:00-04:00' },
+        end: { dateTime: '2026-07-01T15:00:00-04:00' },
+      })
+      .mockRejectedValueOnce(
+        new GoogleApiError(
+          'GOOGLE_API_REQUEST_FAILED',
+          'Google API request failed with status 410.',
+          {
+            retryable: false,
+            status: 410,
+          },
+        ),
+      );
+    vi.mocked(interrupt).mockReturnValue('approve');
+
+    await expect(
+      deleteCalendarEvent.invoke(
+        {
+          eventId: 'event-gone',
+        },
+        {
+          configurable: {
+            access_token: 'calendar-access-token',
+          },
+        },
+      ),
+    ).resolves.toBe(
+      "No event found with ID 'event-gone'. It may no longer exist.",
     );
 
     expect(interrupt).toHaveBeenCalled();

@@ -87,6 +87,12 @@ type ListCalendarEventsResponse = {
 
 const MAX_LIST_RESULTS = 250;
 
+// Google answers 404 for an unknown event and 410 for one that has already
+// been deleted; both mean the same thing to the user.
+function isMissingResourceStatus(error: GoogleApiError): boolean {
+  return error.status === 404 || error.status === 410;
+}
+
 function getAccessToken(config: LangGraphRunnableConfig): string {
   const configurable = config.configurable as
     | Record<string, unknown>
@@ -937,7 +943,7 @@ export const updateCalendarEvent = tool(
         accessToken,
       );
     } catch (error) {
-      if (error instanceof GoogleApiError && error.status === 404) {
+      if (error instanceof GoogleApiError && isMissingResourceStatus(error)) {
         return `No event found with ID '${targetEventId}'. It may no longer exist.`;
       }
 
@@ -1021,7 +1027,7 @@ export const deleteCalendarEvent = tool(
         accessToken,
       );
     } catch (error) {
-      if (error instanceof GoogleApiError && error.status === 404) {
+      if (error instanceof GoogleApiError && isMissingResourceStatus(error)) {
         return `No event found with ID '${targetEventId}'. It may no longer exist.`;
       }
 
