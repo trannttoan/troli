@@ -214,6 +214,19 @@ These verify the state channel refactor didn't break existing functionality.
 
 ---
 
+## O. Delete Calendar Event — Approve/Reject Flows
+
+| #   | Scenario                               | Steps                                                                                                                 | Expected                                                                                                                                                                 | Status |
+| --- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| O1  | Delete approval card layout            | 1. List today's events. 2. Send: "Delete my [event name]."                                                            | Approval card appears with description `Delete "[event name]".` and a "Current" section listing the event's fields. No "Proposed" section is rendered. No crash.         | TODO   |
+| O2  | Delete event — approve                 | 1. Trigger a delete approval card. 2. Tap Approve.                                                                    | Card shows "Approved" badge. Assistant confirms with `Deleted "[event name]".` Event is gone from Google Calendar (web or app).                                          | TODO   |
+| O3  | Delete event — reject                  | 1. Trigger a delete approval card. 2. Tap Reject.                                                                     | Card shows "Rejected" badge. Assistant reports the deletion was cancelled. Event still present and unchanged in Google Calendar.                                         | TODO   |
+| O4  | Recurring event — agent asks for scope | Have a recurring event. Send: "Delete my [recurring event]."                                                          | Agent asks whether to delete only this occurrence or the whole series before proposing. After answering "all instances", card description includes "(all instances)".    | TODO   |
+| O5  | Reopen with pending delete approval    | 1. Trigger a delete approval card. 2. Kill the app before deciding. 3. Reopen and wait for bootstrap. 4. Tap Approve. | Card re-renders after bootstrap with live Approve/Reject buttons and only one copy of the card. The approve resumes the run and the event is deleted in Google Calendar. | TODO   |
+| O6  | Input disabled while delete is pending | 1. Trigger a delete approval card. 2. Try to type and send in the chat input. 3. Decide (approve or reject).          | Input is disabled while the card is pending; nothing can be sent. Input re-enables once the decision completes and the assistant responds.                               | TODO   |
+
+---
+
 ## Extending This Plan
 
 - **Slice 4 (delete + reopen hydration):** Add delete approval flow, app reopen with pending interrupt, duplicate approval card dedup on bootstrap, and L11 (proposed null rendering).
