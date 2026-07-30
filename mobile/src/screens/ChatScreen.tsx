@@ -123,7 +123,7 @@ export function ChatScreen() {
               contentContainerStyle={styles.listContent}
               data={listData}
               inverted
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item.clientKey}
               keyboardDismissMode={
                 Platform.OS === 'ios' ? 'interactive' : 'on-drag'
               }

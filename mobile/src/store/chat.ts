@@ -14,6 +14,14 @@ import { generateThreadId } from '../utils/thread';
 import { useAuthStore } from './auth';
 
 export type ChatMessage = {
+  /**
+   * Stable identity for the chat list's React key. Never changes once a cell
+   * has rendered, even when hydration swaps `id` for the canonical server id —
+   * a changed key would remount the cell, and the inverted list reads a
+   * remount at its scroll anchor as a layout change, answering with an
+   * animated scroll to the bottom the user never asked for.
+   */
+  clientKey: string;
   id: string;
   interrupt?: InterruptPayload;
   role: 'user' | 'assistant';
@@ -40,7 +48,12 @@ type ChatState = {
   sendMessage: (text: string) => Promise<void>;
 };
 
-const LOCAL_MESSAGE_ID_PREFIX = 'local-';
+const LOCAL_CLIENT_KEY_PREFIX = 'local-';
+
+type StreamedClientKeys = {
+  assistant?: string;
+  user?: string;
+};
 
 const initialChatState = {
   errorMessage: null as string | null,
@@ -135,7 +148,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const authState = useAuthStore.getState();
     const accessToken = await authState.getValidToken();
     const nextStatus = decision === 'approve' ? 'approved' : 'rejected';
-    const streamingAssistantId = createLocalMessageId('assistant');
+    const streamingAssistantKey = createLocalClientKey('assistant');
 
     set((currentState) => ({
       errorMessage: null,
@@ -158,7 +171,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set((currentState) => ({
             messages: upsertStreamingAssistantSnapshot(
               currentState.messages,
-              streamingAssistantId,
+              streamingAssistantKey,
               text,
             ),
           }));
@@ -167,7 +180,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         timezone: getDeviceTimezone(),
       });
 
-      const hydratedState = await hydrateMessagesForThread(threadId);
+      const hydratedState = await hydrateMessagesForThread(threadId, {
+        assistant: streamingAssistantKey,
+      });
 
       set({
         ...hydratedState,
@@ -176,7 +191,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     } catch (error) {
       try {
-        const hydratedState = await hydrateMessagesForThread(threadId);
+        const hydratedState = await hydrateMessagesForThread(threadId, {
+          assistant: streamingAssistantKey,
+        });
 
         set({
           ...hydratedState,
@@ -190,7 +207,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             'Your approval may have been received. Reopen the app once you are back online to reload the conversation.',
           isSending: false,
           messages: currentState.messages
-            .filter((message) => message.id !== streamingAssistantId)
+            .filter((message) => message.clientKey !== streamingAssistantKey)
             .map((message) =>
               message.id === messageId
                 ? {
@@ -239,13 +256,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     const accessToken = await authState.getValidToken();
+    const userClientKey = createLocalClientKey('user');
     const userMessage: ChatMessage = {
-      id: createLocalMessageId('user'),
+      clientKey: userClientKey,
+      id: userClientKey,
       role: 'user',
       text: trimmedText,
       timestamp: Date.now(),
     };
-    const streamingAssistantId = createLocalMessageId('assistant');
+    const streamingAssistantKey = createLocalClientKey('assistant');
 
     set((currentState) => ({
       errorMessage: null,
@@ -261,7 +280,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set((currentState) => ({
             messages: upsertStreamingAssistantSnapshot(
               currentState.messages,
-              streamingAssistantId,
+              streamingAssistantKey,
               text,
             ),
           }));
@@ -272,7 +291,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       set({
         isSending: false,
-        ...(await hydrateMessagesForThread(threadId)),
+        ...(await hydrateMessagesForThread(threadId, {
+          assistant: streamingAssistantKey,
+          user: userClientKey,
+        })),
         threadId,
       });
     } catch (error) {
@@ -288,7 +310,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       try {
         set({
-          ...(await hydrateMessagesForThread(threadId)),
+          ...(await hydrateMessagesForThread(threadId, {
+            assistant: streamingAssistantKey,
+            user: userClientKey,
+          })),
           threadId,
         });
         return;
@@ -297,7 +322,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           errorMessage:
             'Your message may have been received. Reopen the app once you are back online to reload the conversation.',
           messages: currentState.messages.filter(
-            (m) => m.id !== streamingAssistantId && m.id !== userMessage.id,
+            (m) =>
+              m.clientKey !== streamingAssistantKey &&
+              m.clientKey !== userClientKey,
           ),
         }));
       }
@@ -314,11 +341,13 @@ export function resetChatState() {
 
 async function hydrateMessagesForThread(
   threadId: string,
+  streamedKeys: StreamedClientKeys = {},
 ): Promise<Pick<ChatState, 'errorMessage' | 'messages'>> {
   const hydratedMessages = await bootstrapRemoteThread(threadId);
-  let messages = preserveLocalMessageIds(
+  let messages = carryClientKeys(
     useChatStore.getState().messages,
     normalizeMessages(hydratedMessages.messages),
+    streamedKeys,
   );
 
   if (hydratedMessages.status === 'interrupted') {
@@ -340,6 +369,7 @@ async function hydrateMessagesForThread(
 
 function normalizeMessages(messages: HydratedChatMessage[]): ChatMessage[] {
   return messages.map((message) => ({
+    clientKey: message.id,
     id: message.id,
     role: message.role,
     text: message.text,
@@ -348,25 +378,48 @@ function normalizeMessages(messages: HydratedChatMessage[]): ChatMessage[] {
 }
 
 /**
- * Message ids are the chat list's React keys. Hydration swaps the locally
- * generated ids of the messages it just streamed for canonical server ids,
- * which remounts those cells — and the inverted list reads a remounted cell at
- * its scroll anchor as a layout change, answering with an animated scroll to
- * the bottom the user never asked for. Keep the local id when the hydrated
- * message lands in the same slot with the same role so the cell stays mounted.
+ * Keeps every rendered cell's clientKey stable across hydration while ids
+ * adopt the canonical server values (see the ChatMessage.clientKey doc for
+ * why remounts are a problem). Messages the server already knew about are
+ * matched exactly by id; the messages this run just streamed have local ids
+ * the server has never seen, so their keys are grafted onto the newest
+ * hydrated message of the same role that no existing cell claimed.
  */
-function preserveLocalMessageIds(
+function carryClientKeys(
   existing: ChatMessage[],
   hydrated: ChatMessage[],
+  streamedKeys: StreamedClientKeys,
 ): ChatMessage[] {
-  return hydrated.map((message, index) => {
-    const previous = existing[index];
+  const keysByServerId = new Map(
+    existing.map((message) => [message.id, message.clientKey]),
+  );
+  const messages = hydrated.map((message) => {
+    const carriedKey = keysByServerId.get(message.id);
 
-    return previous?.role === message.role &&
-      previous.id.startsWith(LOCAL_MESSAGE_ID_PREFIX)
-      ? { ...message, id: previous.id }
-      : message;
+    return carriedKey ? { ...message, clientKey: carriedKey } : message;
   });
+
+  for (const role of ['assistant', 'user'] as const) {
+    const streamedKey = streamedKeys[role];
+    const didRenderLocally =
+      streamedKey !== undefined &&
+      existing.some((message) => message.clientKey === streamedKey);
+
+    if (!didRenderLocally) {
+      continue;
+    }
+
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+
+      if (message.role === role && !keysByServerId.has(message.id)) {
+        messages[index] = { ...message, clientKey: streamedKey };
+        break;
+      }
+    }
+  }
+
+  return messages;
 }
 
 function upsertInterruptMessage(
@@ -374,6 +427,7 @@ function upsertInterruptMessage(
   interrupt: InterruptPayload,
 ): ChatMessage[] {
   const interruptMessage: ChatMessage = {
+    clientKey: interrupt.id,
     id: interrupt.id,
     interrupt,
     role: 'assistant',
@@ -393,16 +447,19 @@ function upsertInterruptMessage(
 
 function upsertStreamingAssistantSnapshot(
   messages: ChatMessage[],
-  messageId: string,
+  clientKey: string,
   text: string,
 ): ChatMessage[] {
-  const existingMessage = messages.find((message) => message.id === messageId);
+  const existingMessage = messages.find(
+    (message) => message.clientKey === clientKey,
+  );
 
   if (!existingMessage) {
     return [
       ...messages,
       {
-        id: messageId,
+        clientKey,
+        id: clientKey,
         role: 'assistant',
         status: 'streaming',
         text,
@@ -412,7 +469,7 @@ function upsertStreamingAssistantSnapshot(
   }
 
   return messages.map((message) =>
-    message.id === messageId
+    message.clientKey === clientKey
       ? {
           ...message,
           status: 'streaming',
@@ -422,9 +479,9 @@ function upsertStreamingAssistantSnapshot(
   );
 }
 
-function createLocalMessageId(role: ChatMessage['role']): string {
+function createLocalClientKey(role: ChatMessage['role']): string {
   const suffix = Math.random().toString(36).slice(2, 10);
-  return `${LOCAL_MESSAGE_ID_PREFIX}${role}-${Date.now()}-${suffix}`;
+  return `${LOCAL_CLIENT_KEY_PREFIX}${role}-${Date.now()}-${suffix}`;
 }
 
 function getDeviceTimezone(): string {

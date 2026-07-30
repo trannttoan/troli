@@ -57,6 +57,7 @@ function createApprovalMessage(
   status: 'approved' | 'pending_approval' | 'rejected' = 'pending_approval',
 ) {
   return {
+    clientKey: 'interrupt-task-1',
     id: 'interrupt-task-1',
     interrupt: createInterruptPayload(),
     role: 'assistant' as const,
@@ -106,7 +107,13 @@ describe('useChatStore', () => {
 
       expect(state.threadId).toBe('deterministic-thread-id');
       expect(state.messages).toEqual([
-        { id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 },
+        {
+          clientKey: 'msg-1',
+          id: 'msg-1',
+          role: 'user',
+          text: 'Hello',
+          timestamp: 1000,
+        },
       ]);
       expect(state.isBootstrapping).toBe(false);
       expect(state.errorMessage).toBeNull();
@@ -205,8 +212,15 @@ describe('useChatStore', () => {
         threadState,
       );
       expect(chatStore.useChatStore.getState().messages).toEqual([
-        { id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 },
         {
+          clientKey: 'msg-1',
+          id: 'msg-1',
+          role: 'user',
+          text: 'Hello',
+          timestamp: 1000,
+        },
+        {
+          clientKey: 'msg-2',
           id: 'msg-2',
           role: 'assistant',
           text: 'Need approval',
@@ -294,15 +308,15 @@ describe('useChatStore', () => {
       expect(langgraph.getThreadState).not.toHaveBeenCalled();
     });
 
-    it('keeps the streamed messages on their local ids after hydration', async () => {
+    it('keeps streamed cells on their client keys while adopting server ids', async () => {
       const { chatStore, langgraph } = loadChatModule();
-      let streamedIds: string[] = [];
+      let streamedClientKeys: string[] = [];
 
       jest.mocked(langgraph.streamRun).mockImplementation(async (input) => {
         await input.onAssistantTextSnapshot?.('Hi there');
-        streamedIds = chatStore.useChatStore
+        streamedClientKeys = chatStore.useChatStore
           .getState()
-          .messages.map((message) => message.id);
+          .messages.map((message) => message.clientKey);
       });
       jest.mocked(langgraph.bootstrapThread).mockResolvedValue({
         messages: [
@@ -317,12 +331,18 @@ describe('useChatStore', () => {
 
       const state = chatStore.useChatStore.getState();
 
-      expect(streamedIds).toHaveLength(2);
-      expect(state.messages.map((message) => message.id)).toEqual(streamedIds);
+      expect(streamedClientKeys).toHaveLength(2);
+      expect(state.messages.map((message) => message.clientKey)).toEqual(
+        streamedClientKeys,
+      );
+      expect(state.messages.map((message) => message.id)).toEqual([
+        'msg-1',
+        'msg-2',
+      ]);
       expect(state.messages[1]?.status).toBeUndefined();
     });
 
-    it('adopts server ids for messages that were not rendered locally', async () => {
+    it('keeps server client keys for messages that were not rendered locally', async () => {
       const { chatStore, langgraph } = loadChatModule();
 
       jest.mocked(langgraph.streamRun).mockResolvedValue(undefined);
@@ -339,7 +359,69 @@ describe('useChatStore', () => {
 
       const state = chatStore.useChatStore.getState();
 
+      // The user bubble rendered optimistically, so its key carries over; no
+      // assistant cell ever mounted, so the assistant keeps the server key.
+      expect(state.messages[0]?.clientKey).toMatch(/^local-user-/);
+      expect(state.messages[1]?.clientKey).toBe('msg-2');
       expect(state.messages[1]?.id).toBe('msg-2');
+    });
+
+    it('keeps prior-turn client keys stable across a later hydration', async () => {
+      const { chatStore, langgraph } = loadChatModule();
+
+      jest.mocked(langgraph.streamRun).mockImplementation(async (input) => {
+        await input.onAssistantTextSnapshot?.('Second reply');
+      });
+      jest.mocked(langgraph.bootstrapThread).mockResolvedValue({
+        messages: [
+          { id: 'msg-1', role: 'user', text: 'First', timestamp: 1000 },
+          { id: 'msg-2', role: 'assistant', text: 'Reply', timestamp: 1001 },
+          { id: 'msg-3', role: 'user', text: 'Second', timestamp: 1002 },
+          {
+            id: 'msg-4',
+            role: 'assistant',
+            text: 'Second reply',
+            timestamp: 1003,
+          },
+        ],
+        status: 'idle',
+      });
+      chatStore.useChatStore.setState({
+        messages: [
+          {
+            clientKey: 'local-user-first',
+            id: 'msg-1',
+            role: 'user',
+            text: 'First',
+            timestamp: 1000,
+          },
+          {
+            clientKey: 'local-assistant-first',
+            id: 'msg-2',
+            role: 'assistant',
+            text: 'Reply',
+            timestamp: 1001,
+          },
+        ],
+        threadId: 'thread-1',
+      });
+
+      await chatStore.useChatStore.getState().sendMessage('Second');
+
+      const state = chatStore.useChatStore.getState();
+
+      expect(state.messages.map((message) => message.clientKey)).toEqual([
+        'local-user-first',
+        'local-assistant-first',
+        expect.stringMatching(/^local-user-/) as string,
+        expect.stringMatching(/^local-assistant-/) as string,
+      ]);
+      expect(state.messages.map((message) => message.id)).toEqual([
+        'msg-1',
+        'msg-2',
+        'msg-3',
+        'msg-4',
+      ]);
     });
 
     it('appends a pending approval message when hydration reports interrupted status', async () => {
@@ -374,18 +456,21 @@ describe('useChatStore', () => {
       );
       expect(chatStore.useChatStore.getState().messages).toEqual([
         {
-          id: expect.stringMatching(/^local-user-/) as string,
+          clientKey: expect.stringMatching(/^local-user-/) as string,
+          id: 'msg-1',
           role: 'user',
           text: 'Hello',
           timestamp: 1000,
         },
         {
+          clientKey: 'msg-2',
           id: 'msg-2',
           role: 'assistant',
           text: 'Need approval',
           timestamp: 1001,
         },
         {
+          clientKey: 'interrupt-task-1',
           id: 'interrupt-task-1',
           interrupt,
           role: 'assistant',
@@ -443,12 +528,14 @@ describe('useChatStore', () => {
 
       expect(chatStore.useChatStore.getState().messages).toEqual([
         {
-          id: expect.stringMatching(/^local-user-/) as string,
+          clientKey: expect.stringMatching(/^local-user-/) as string,
+          id: 'msg-1',
           role: 'user',
           text: 'Hello',
           timestamp: 1000,
         },
         {
+          clientKey: 'interrupt-task-1',
           id: 'interrupt-task-1',
           interrupt,
           role: 'assistant',
@@ -564,6 +651,7 @@ describe('useChatStore', () => {
       chatStore.useChatStore.setState({
         messages: [
           {
+            clientKey: 'interrupt-task-1',
             id: 'interrupt-task-1',
             interrupt,
             role: 'assistant',
@@ -595,8 +683,20 @@ describe('useChatStore', () => {
       ]);
 
       expect(chatStore.useChatStore.getState().messages).toEqual([
-        { id: 'msg-1', role: 'user', text: 'Hello', timestamp: 1000 },
-        { id: 'msg-2', role: 'assistant', text: 'Hi', timestamp: 1001 },
+        {
+          clientKey: 'msg-1',
+          id: 'msg-1',
+          role: 'user',
+          text: 'Hello',
+          timestamp: 1000,
+        },
+        {
+          clientKey: 'msg-2',
+          id: 'msg-2',
+          role: 'assistant',
+          text: 'Hi',
+          timestamp: 1001,
+        },
       ]);
     });
 
@@ -678,9 +778,16 @@ describe('useChatStore', () => {
         }),
       );
       expect(chatStore.useChatStore.getState().messages).toEqual([
-        { id: 'msg-1', role: 'user', text: 'Approve this', timestamp: 1000 },
         {
-          id: expect.stringMatching(/^local-assistant-/) as string,
+          clientKey: 'msg-1',
+          id: 'msg-1',
+          role: 'user',
+          text: 'Approve this',
+          timestamp: 1000,
+        },
+        {
+          clientKey: expect.stringMatching(/^local-assistant-/) as string,
+          id: 'msg-2',
           role: 'assistant',
           text: 'Approved.',
           timestamp: 1001,
@@ -725,8 +832,15 @@ describe('useChatStore', () => {
         }),
       );
       expect(chatStore.useChatStore.getState().messages).toEqual([
-        { id: 'msg-1', role: 'user', text: 'Reject this', timestamp: 1000 },
         {
+          clientKey: 'msg-1',
+          id: 'msg-1',
+          role: 'user',
+          text: 'Reject this',
+          timestamp: 1000,
+        },
+        {
+          clientKey: 'msg-2',
           id: 'msg-2',
           role: 'assistant',
           text: 'Rejected.',
@@ -768,6 +882,7 @@ describe('useChatStore', () => {
 
       expect(chatStore.useChatStore.getState().messages).toEqual([
         {
+          clientKey: 'msg-1',
           id: 'msg-1',
           role: 'assistant',
           text: 'Server already handled it.',
@@ -871,12 +986,14 @@ describe('useChatStore', () => {
 
       expect(chatStore.useChatStore.getState().messages).toEqual([
         {
+          clientKey: 'msg-1',
           id: 'msg-1',
           role: 'assistant',
           text: 'One more step.',
           timestamp: 1001,
         },
         {
+          clientKey: 'interrupt-task-2',
           id: 'interrupt-task-2',
           interrupt: nextInterrupt,
           role: 'assistant',
@@ -893,7 +1010,9 @@ describe('useChatStore', () => {
       const { chatStore } = loadChatModule();
 
       chatStore.useChatStore.setState({
-        messages: [{ id: 'msg-1', role: 'assistant', text: 'Hello' }],
+        messages: [
+          { clientKey: 'msg-1', id: 'msg-1', role: 'assistant', text: 'Hello' },
+        ],
       });
 
       expect(chatStore.useChatStore.getState().hasPendingApproval()).toBe(
@@ -918,7 +1037,9 @@ describe('useChatStore', () => {
 
       chatStore.useChatStore.setState({
         errorMessage: 'some error',
-        messages: [{ id: 'msg-1', role: 'user', text: 'Hello' }],
+        messages: [
+          { clientKey: 'msg-1', id: 'msg-1', role: 'user', text: 'Hello' },
+        ],
         threadId: 'thread-1',
       });
 
