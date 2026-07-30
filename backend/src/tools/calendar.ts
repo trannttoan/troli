@@ -57,6 +57,11 @@ type UpdateCalendarEventInput = {
   attendees?: string[];
 };
 
+type DeleteCalendarEventInput = {
+  eventId: string;
+  recurringEventScope?: 'single' | 'all';
+};
+
 type CreateCalendarEventRequestBody = {
   summary: string;
   start: CalendarEventDateTime;
@@ -139,6 +144,10 @@ function buildCreateCalendarEventUrl(): string {
 }
 
 function buildUpdateCalendarEventUrl(eventId: string): string {
+  return `${GOOGLE_CALENDAR_API_BASE_URL}/calendars/primary/events/${encodeURIComponent(eventId)}`;
+}
+
+function buildDeleteCalendarEventUrl(eventId: string): string {
   return `${GOOGLE_CALENDAR_API_BASE_URL}/calendars/primary/events/${encodeURIComponent(eventId)}`;
 }
 
@@ -472,6 +481,17 @@ function buildUpdateDescription(
     : `Update "${currentSummary}"${scopeLabel}.`;
 }
 
+function buildDeleteDescription(
+  currentEvent: DetailedCalendarEvent,
+  scope: DeleteCalendarEventInput['recurringEventScope'],
+): string {
+  const currentSummary = currentEvent.summary?.trim() || 'Untitled event';
+  const scopeLabel =
+    scope === 'all' && currentEvent.recurringEventId ? ' (all instances)' : '';
+
+  return `Delete "${currentSummary}"${scopeLabel}.`;
+}
+
 const createCalendarEventSchema = z
   .object({
     summary: z.string().trim().min(1).describe('The event title or summary.'),
@@ -724,6 +744,20 @@ const updateCalendarEventSchema = z
     }
   });
 
+const deleteCalendarEventSchema = z.object({
+  eventId: z
+    .string()
+    .trim()
+    .min(1)
+    .describe('The Google Calendar event ID to delete.'),
+  recurringEventScope: z
+    .enum(['single', 'all'])
+    .optional()
+    .describe(
+      'For recurring events, delete only this instance or the whole series.',
+    ),
+});
+
 export const listCalendarEvents = tool(
   async ({ timeMin, timeMax, query }, config) => {
     const accessToken = getAccessToken(config);
@@ -924,9 +958,96 @@ export const updateCalendarEvent = tool(
   },
 );
 
+export const deleteCalendarEvent = tool(
+  async (input, config) => {
+    const accessToken = getAccessToken(config);
+
+    let currentEvent: DetailedCalendarEvent;
+
+    try {
+      currentEvent = (await fetchWithAuth<DetailedCalendarEvent>(
+        buildGetCalendarEventUrl(input.eventId),
+        {
+          method: 'GET',
+        },
+        accessToken,
+      )) ?? { id: input.eventId };
+    } catch (error) {
+      if (error instanceof GoogleApiError && error.status === 404) {
+        return `No event found with ID '${input.eventId}'.`;
+      }
+
+      throw error;
+    }
+
+    if (currentEvent.status === 'cancelled') {
+      const summary = currentEvent.summary?.trim() || 'Untitled event';
+      return `Event "${summary}" has already been deleted.`;
+    }
+
+    const decision = interrupt<
+      {
+        action: 'delete_calendar_event';
+        description: string;
+        current: ReturnType<typeof toEventSnapshot>;
+        proposed: null;
+      },
+      'approve' | 'reject'
+    >({
+      action: 'delete_calendar_event',
+      description: buildDeleteDescription(
+        currentEvent,
+        input.recurringEventScope,
+      ),
+      current: toEventSnapshot(currentEvent),
+      proposed: null,
+    });
+
+    if (decision !== 'approve') {
+      return 'Deletion cancelled.';
+    }
+
+    const targetEventId =
+      input.recurringEventScope === 'all' && currentEvent.recurringEventId
+        ? currentEvent.recurringEventId
+        : input.eventId;
+
+    try {
+      await fetchWithAuth(
+        buildDeleteCalendarEventUrl(targetEventId),
+        {
+          method: 'DELETE',
+        },
+        accessToken,
+      );
+    } catch (error) {
+      if (error instanceof GoogleApiError && error.status === 404) {
+        return `No event found with ID '${targetEventId}'. It may no longer exist.`;
+      }
+
+      throw error;
+    }
+
+    const summary = currentEvent.summary?.trim() || 'Untitled event';
+    const scopeLabel =
+      input.recurringEventScope === 'all' && currentEvent.recurringEventId
+        ? ' (all instances)'
+        : '';
+
+    return `Deleted "${summary}"${scopeLabel}.`;
+  },
+  {
+    name: 'delete_calendar_event',
+    description:
+      "Delete an event from the user's primary Google Calendar. Requires user approval.",
+    schema: deleteCalendarEventSchema,
+  },
+);
+
 export const calendarTools = [
   listCalendarEvents,
   getCalendarEvent,
   createCalendarEvent,
   updateCalendarEvent,
+  deleteCalendarEvent,
 ];
