@@ -20,6 +20,7 @@ jest.mock('../../utils/auth', () => ({
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',
     'https://www.googleapis.com/auth/calendar.events.owned',
+    'https://www.googleapis.com/auth/tasks',
   ],
   getGoogleIosClientId: jest.fn(() => 'ios-client-id'),
   isForceReauthError: jest.fn(
@@ -46,6 +47,7 @@ const baseSession = {
   scopes: [
     'https://www.googleapis.com/auth/calendar.events.owned',
     'openid',
+    'https://www.googleapis.com/auth/tasks',
     'https://www.googleapis.com/auth/userinfo.email',
     'https://www.googleapis.com/auth/userinfo.profile',
   ],
@@ -308,7 +310,44 @@ describe('useAuthStore', () => {
     expect(deleteItemAsync).toHaveBeenCalledTimes(5);
     expect(resetChatState).toHaveBeenCalledTimes(1);
     expect(authStore.useAuthStore.getState()).toMatchObject({
-      errorMessage: 'Troli now needs calendar access. Please sign in again.',
+      errorMessage:
+        'Troli now needs calendar and tasks access. Please sign in again.',
+      status: 'signed_out',
+    });
+
+    authStore.__setLoadChatStoreModuleForTest(null);
+  });
+
+  it('signs out during initialize when stored scopes are missing the tasks scope', async () => {
+    const { authStore, secureStore } = await loadAuthModule();
+    const getItemAsync = jest.mocked(secureStore.getItemAsync);
+    const resetChatState = jest.fn();
+
+    authStore.__setLoadChatStoreModuleForTest(async () => ({ resetChatState }));
+
+    getItemAsync.mockImplementation((key: string) => {
+      const stored: Record<string, string> = {
+        auth_access_token: 'stored-access',
+        auth_refresh_token: 'stored-refresh',
+        auth_token_expiry: '2099-01-01T00:00:00.000Z',
+        auth_user_email: 'stored@example.com',
+        auth_granted_scopes: JSON.stringify([
+          'openid',
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
+          'https://www.googleapis.com/auth/calendar.events.owned',
+        ]),
+      };
+
+      return Promise.resolve(stored[key] ?? null);
+    });
+
+    await authStore.useAuthStore.getState().initialize();
+
+    expect(resetChatState).toHaveBeenCalledTimes(1);
+    expect(authStore.useAuthStore.getState()).toMatchObject({
+      errorMessage:
+        'Troli now needs calendar and tasks access. Please sign in again.',
       status: 'signed_out',
     });
 

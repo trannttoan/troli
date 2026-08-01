@@ -25,7 +25,7 @@ const STORAGE_OPTIONS = {
 } as const;
 
 const SCOPE_MISMATCH_MESSAGE =
-  'Troli now needs calendar access. Please sign in again.';
+  'Troli now needs calendar and tasks access. Please sign in again.';
 
 type AuthStatus = 'loading' | 'signed_in' | 'signed_out';
 
