@@ -1,9 +1,9 @@
 import { tool } from '@langchain/core/tools';
-import { interrupt, LangGraphRunnableConfig } from '@langchain/langgraph';
+import { interrupt } from '@langchain/langgraph';
 import { z } from 'zod';
 
-import { TroliAuthError } from '../utils/auth.js';
 import { fetchWithAuth, GoogleApiError } from '../utils/google-api.js';
+import { getAccessToken } from '../utils/tool-config.js';
 
 const GOOGLE_CALENDAR_API_BASE_URL = 'https://www.googleapis.com/calendar/v3';
 
@@ -91,26 +91,6 @@ const MAX_LIST_RESULTS = 250;
 // been deleted; both mean the same thing to the user.
 function isMissingResourceStatus(error: GoogleApiError): boolean {
   return error.status === 404 || error.status === 410;
-}
-
-function getAccessToken(config: LangGraphRunnableConfig): string {
-  const configurable = config.configurable as
-    | Record<string, unknown>
-    | undefined;
-  const accessToken = configurable?.access_token;
-
-  if (typeof accessToken !== 'string' || accessToken.trim() === '') {
-    throw new TroliAuthError(
-      'AUTH_MISSING_ACCESS_TOKEN',
-      'Missing Google access token in run config.',
-      {
-        retryable: false,
-        status: 401,
-      },
-    );
-  }
-
-  return accessToken.trim();
 }
 
 function buildListCalendarEventsUrl(input: {
