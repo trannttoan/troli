@@ -21,6 +21,9 @@ import {
 import { stampLatestHumanMessage, stampMessage } from './utils/timestamp.js';
 import { windowMessages } from './utils/window-messages.js';
 import { calendarTools } from './tools/calendar.js';
+import { taskTools } from './tools/tasks.js';
+
+const allTools = [...calendarTools, ...taskTools];
 
 const AgentState = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
@@ -80,7 +83,7 @@ async function preprocessNode(
   return preprocessMessages(state.messages);
 }
 
-const toolNode = new ToolNode(calendarTools);
+const toolNode = new ToolNode(allTools);
 
 async function toolsNode(
   state: typeof AgentState.State,
@@ -100,7 +103,7 @@ export const workflow = new StateGraph(AgentState)
   .addNode('preprocess', preprocessNode)
   .addNode('agent', async (state, config) => {
     const response = await getModel()
-      .bindTools(calendarTools)
+      .bindTools(allTools)
       .invoke([
         new SystemMessage(
           buildSystemPrompt({ timezone: getTimezoneFromConfig(config) }),
