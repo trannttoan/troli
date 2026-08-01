@@ -46,8 +46,9 @@ Full calendar CRUD. Introduces the HITL interrupt/resume flow.
 
 Same pattern as calendar. Faster since HITL plumbing already exists.
 
+- **OAuth scope:** Add `https://www.googleapis.com/auth/tasks` to the requested scopes. Existing sessions re-auth automatically via the Phase 2 scope-mismatch detection; update the "calendar access" messaging to also cover tasks.
 - **Read tools:** `list_task_lists`, `list_tasks`, `get_task`.
-- **Create tool:** `create_task`. System prompt instructs agent to ask which list when the user doesn't specify one.
+- **Create tool:** `create_task`. The system prompt rule to ask which list when the user doesn't specify one already shipped in Phase 1 — verify the behavior, no prompt change needed.
 - **Write tools:** `update_task`, `delete_task`. Behind HITL approval, except status-only updates (mark complete/incomplete via `status`), which execute directly — completion is reversible. Add the exception to the system prompt approval rule.
 - **Tests:** Task tool unit tests (mocked API responses).
 
