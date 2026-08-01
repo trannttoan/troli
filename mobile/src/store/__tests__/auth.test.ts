@@ -321,6 +321,7 @@ describe('useAuthStore', () => {
   it('signs out during initialize when stored scopes are missing the tasks scope', async () => {
     const { authStore, secureStore } = await loadAuthModule();
     const getItemAsync = jest.mocked(secureStore.getItemAsync);
+    const deleteItemAsync = jest.mocked(secureStore.deleteItemAsync);
     const resetChatState = jest.fn();
 
     authStore.__setLoadChatStoreModuleForTest(async () => ({ resetChatState }));
@@ -344,6 +345,7 @@ describe('useAuthStore', () => {
 
     await authStore.useAuthStore.getState().initialize();
 
+    expect(deleteItemAsync).toHaveBeenCalledTimes(5);
     expect(resetChatState).toHaveBeenCalledTimes(1);
     expect(authStore.useAuthStore.getState()).toMatchObject({
       errorMessage:
