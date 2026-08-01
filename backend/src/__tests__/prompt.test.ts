@@ -71,4 +71,12 @@ describe('buildSystemPrompt', () => {
     expect(result).toContain('create an event or task');
     expect(result).toContain('approval before the change goes through');
   });
+
+  it('forbids showing task and task list IDs alongside event IDs', () => {
+    const result = buildSystemPrompt({ now: fixedNow });
+
+    expect(result).toContain(
+      'Never show event, task, or task list IDs to the user',
+    );
+  });
 });
