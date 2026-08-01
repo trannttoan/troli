@@ -197,13 +197,13 @@ Each Google API operation is a LangGraph tool defined with Zod schemas. Tools ar
 
 **Calendar tools:**
 
-| Tool Name               | Type  | HITL      | Parameters                                                                                                                                                                                                                        |
-| ----------------------- | ----- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_calendar_events`  | Read  | Auto      | `timeMin`, `timeMax`, `query` (optional)                                                                                                                                                                                          |
-| `get_calendar_event`    | Read  | Auto      | `eventId`                                                                                                                                                                                                                         |
-| `create_calendar_event` | Write | Auto      | `summary`, `startDateTime`, `endDateTime`, `startDate` (optional, YYYY-MM-DD for all-day), `endDate` (optional, YYYY-MM-DD for all-day), `location` (optional), `description` (optional), `attendees` (optional, array of emails) |
-| `update_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single`, `thisAndFollowing`, or `all`, required for recurring events), plus any fields to update (including `startDate`/`endDate` for all-day events)                                          |
-| `delete_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single`, `thisAndFollowing`, or `all`, required for recurring events)                                                                                                                          |
+| Tool Name               | Type  | HITL      | Parameters                                                                                                                                                                                                                              |
+| ----------------------- | ----- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_calendar_events`  | Read  | Auto      | `timeMin`, `timeMax`, `query` (optional)                                                                                                                                                                                                |
+| `get_calendar_event`    | Read  | Auto      | `eventId`                                                                                                                                                                                                                               |
+| `create_calendar_event` | Write | Auto      | `summary`, `startDateTime`, `endDateTime`, `startDate` (optional, YYYY-MM-DD for all-day), `endDate` (optional, YYYY-MM-DD for all-day), `location` (optional), `description` (optional), `attendees` (optional, array of emails)       |
+| `update_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single` or `all`, required for recurring events; `thisAndFollowing` deferred post-v1.0 — requires split-series flow), plus any fields to update (including `startDate`/`endDate` for all-day events) |
+| `delete_calendar_event` | Write | Interrupt | `eventId`, `recurringEventScope` (`single` or `all`, required for recurring events; `thisAndFollowing` deferred post-v1.0)                                                                                                              |
 
 **Tasks tools:**
 
@@ -237,7 +237,7 @@ HITL uses LangGraph's `interrupt()` function. Write tools for update and delete 
 const update_calendar_event = tool(
   async ({ eventId, ...updates }, config) => {
     // Fetch current event for context
-    const current = await fetchEvent(eventId, config.configurable.accessToken);
+    const current = await fetchEvent(eventId, config.configurable.access_token);
 
     // Pause for approval
     const decision = interrupt({
@@ -255,7 +255,7 @@ const update_calendar_event = tool(
     return await executeUpdate(
       eventId,
       updates,
-      config.configurable.accessToken,
+      config.configurable.access_token,
     );
   },
   {
@@ -305,7 +305,8 @@ Rules:
   Exception: marking a task complete or incomplete does not need approval — do
   it directly.
 - For recurring events: always ask whether the user wants to change a single
-  occurrence or all future occurrences before proposing the update or delete.
+  occurrence or the whole series before proposing the update or delete. Changing
+  the series affects every occurrence, including past ones.
 - When the user asks to create a task without specifying a task list, ask which
   list to use.
 - Never fabricate event details, task content, or email content. Only report
