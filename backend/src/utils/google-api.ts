@@ -65,7 +65,7 @@ export async function fetchWithAuth<T>(
     if (response.status === 403) {
       throw new GoogleApiError(
         'GOOGLE_API_INSUFFICIENT_SCOPE',
-        'Google calendar access is missing required permissions. Sign in again to grant calendar access.',
+        'Google access is missing required permissions. Sign in again to grant calendar and tasks access.',
         {
           retryable: false,
           status: 403,
