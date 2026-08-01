@@ -74,14 +74,14 @@ Troli requests the narrowest scopes possible while supporting all v1.0 operation
 
 ### 5.2 Google Tasks Operations
 
-| Operation       | HITL Required        | Notes                                          |
-| --------------- | -------------------- | ---------------------------------------------- |
-| List task lists | No                   | Enumerate available lists                      |
-| List tasks      | No                   | Tasks within a specific list                   |
-| Get task        | No                   | Single task by ID                              |
-| Create task     | No                   | Agent creates directly based on user's request |
-| Update task     | Yes (approve/reject) | Includes marking as complete                   |
-| Delete task     | Yes (approve/reject) | Agent confirms task name, user approves        |
+| Operation       | HITL Required           | Notes                                                                                                                       |
+| --------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| List task lists | No                      | Enumerate available lists                                                                                                   |
+| List tasks      | No                      | Tasks within a specific list                                                                                                |
+| Get task        | No                      | Single task by ID                                                                                                           |
+| Create task     | No                      | Agent creates directly based on user's request                                                                              |
+| Update task     | Yes, except status-only | Marking complete/incomplete executes directly — completion is reversible and low-risk. Other field updates require approval |
+| Delete task     | Yes (approve/reject)    | Agent confirms task name, user approves                                                                                     |
 
 **Task list disambiguation:** When the user creates a task without specifying a list, the agent asks which list to use.
 

@@ -48,7 +48,7 @@ Same pattern as calendar. Faster since HITL plumbing already exists.
 
 - **Read tools:** `list_task_lists`, `list_tasks`, `get_task`.
 - **Create tool:** `create_task`. System prompt instructs agent to ask which list when the user doesn't specify one.
-- **Write tools:** `update_task` (including mark-as-complete via `status: "completed"`), `delete_task`. Both behind HITL approval.
+- **Write tools:** `update_task`, `delete_task`. Behind HITL approval, except status-only updates (mark complete/incomplete via `status`), which execute directly — completion is reversible. Add the exception to the system prompt approval rule.
 - **Tests:** Task tool unit tests (mocked API responses).
 
 ---
