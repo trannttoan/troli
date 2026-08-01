@@ -207,14 +207,16 @@ Each Google API operation is a LangGraph tool defined with Zod schemas. Tools ar
 
 **Tasks tools:**
 
-| Tool Name         | Type  | HITL      | Parameters                                                  |
-| ----------------- | ----- | --------- | ----------------------------------------------------------- |
-| `list_task_lists` | Read  | Auto      | None                                                        |
-| `list_tasks`      | Read  | Auto      | `taskListId`                                                |
-| `get_task`        | Read  | Auto      | `taskListId`, `taskId`                                      |
-| `create_task`     | Write | Auto      | `taskListId`, `title`, `due` (optional), `notes` (optional) |
-| `update_task`     | Write | Interrupt | `taskListId`, `taskId`, plus fields to update               |
-| `delete_task`     | Write | Interrupt | `taskListId`, `taskId`                                      |
+| Tool Name         | Type  | HITL       | Parameters                                                                        |
+| ----------------- | ----- | ---------- | --------------------------------------------------------------------------------- |
+| `list_task_lists` | Read  | Auto       | None                                                                              |
+| `list_tasks`      | Read  | Auto       | `taskListId`                                                                      |
+| `get_task`        | Read  | Auto       | `taskListId`, `taskId`                                                            |
+| `create_task`     | Write | Auto       | `taskListId`, `title`, `due` (optional), `notes` (optional)                       |
+| `update_task`     | Write | Interrupt¹ | `taskListId`, `taskId`, plus fields to update (`title`, `notes`, `due`, `status`) |
+| `delete_task`     | Write | Interrupt  | `taskListId`, `taskId`                                                            |
+
+¹ Status-only updates (marking a task complete or incomplete) execute directly without approval — completion is reversible and low-risk. Updates touching any other field interrupt as usual.
 
 **Gmail tools:**
 
@@ -300,6 +302,8 @@ Rules:
 - When the user asks you to create an event or task, do it directly.
 - When the user asks you to update or delete something, you'll be asked for
   approval before the change goes through. Show the user clearly what will change.
+  Exception: marking a task complete or incomplete does not need approval — do
+  it directly.
 - For recurring events: always ask whether the user wants to change a single
   occurrence or all future occurrences before proposing the update or delete.
 - When the user asks to create a task without specifying a task list, ask which
