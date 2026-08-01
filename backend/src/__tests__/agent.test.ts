@@ -352,6 +352,67 @@ describe('agent graph', () => {
       );
     });
 
+    it('binds calendar and task tools to the model', async () => {
+      await graph.invoke(
+        { messages: [new HumanMessage('Hello')] },
+        buildConfig(),
+      );
+
+      const boundTools = modelBindToolsSpy.mock.calls[0]![0] as Array<{
+        name: string;
+      }>;
+      const boundToolNames = boundTools.map((boundTool) => boundTool.name);
+
+      expect(boundToolNames).toContain('list_calendar_events');
+      expect(boundToolNames).toContain('list_task_lists');
+    });
+
+    it('completes the tool loop when the model calls list_task_lists', async () => {
+      modelInvokeSpy
+        .mockResolvedValueOnce(
+          new AIMessage({
+            content: '',
+            tool_calls: [
+              {
+                id: 'tool-call-1',
+                name: 'list_task_lists',
+                args: {},
+                type: 'tool_call',
+              },
+            ],
+          }),
+        )
+        .mockResolvedValueOnce(
+          new AIMessage('You have two task lists: My Tasks and Groceries.'),
+        );
+      vi.mocked(fetchWithAuth).mockResolvedValue({
+        items: [
+          { id: 'list-1', title: 'My Tasks' },
+          { id: 'list-2', title: 'Groceries' },
+        ],
+      });
+
+      const result = await graph.invoke(
+        { messages: [new HumanMessage('What task lists do I have?')] },
+        buildConfig(),
+      );
+
+      expect(fetchWithAuth).toHaveBeenCalledWith(
+        expect.stringContaining('/tasks/v1/users/@me/lists?'),
+        expect.objectContaining({ method: 'GET' }),
+        'test-access-token',
+      );
+
+      const toolMessage = result.messages.find(
+        (m: { _getType: () => string }) => m._getType() === 'tool',
+      );
+
+      expect(toolMessage?.content).toContain('My Tasks');
+      expect(result.messages[result.messages.length - 1]?.content).toBe(
+        'You have two task lists: My Tasks and Groceries.',
+      );
+    });
+
     it('interrupts on update_calendar_event and resumes with approval', async () => {
       const interruptibleGraph = workflow.compile({
         checkpointer: new MemorySaver(),
