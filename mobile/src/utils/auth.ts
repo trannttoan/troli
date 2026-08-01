@@ -11,6 +11,7 @@ export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
   'https://www.googleapis.com/auth/calendar.events.owned',
+  'https://www.googleapis.com/auth/tasks',
 ];
 
 export type AuthSessionData = {
@@ -110,7 +111,7 @@ export async function buildSessionFromAuthResponse(
   if (missingScopes.length > 0) {
     throw new GoogleAuthError(
       'insufficient_scope',
-      'Troli needs calendar access to work. Please sign in again and grant all permissions.',
+      'Troli needs calendar and tasks access to work. Please sign in again and grant all permissions.',
       true,
     );
   }
