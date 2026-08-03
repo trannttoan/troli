@@ -98,6 +98,72 @@ describe('fetchWithAuth', () => {
     });
   });
 
+  it('maps a 403 SERVICE_DISABLED response to a service disabled error', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 403,
+            message:
+              'Tasks API has not been used in project 123 before or it is disabled.',
+            status: 'PERMISSION_DENIED',
+            details: [{ reason: 'SERVICE_DISABLED' }],
+          },
+        }),
+        {
+          headers: { 'content-type': 'application/json' },
+          status: 403,
+        },
+      ),
+    );
+
+    const error = await fetchWithAuth(
+      'https://www.googleapis.com/tasks/v1/users/@me/lists',
+      {},
+      'valid-token',
+    ).catch((thrown: unknown) => thrown as GoogleApiError);
+
+    expect(error).toMatchObject<Partial<GoogleApiError>>({
+      code: 'GOOGLE_API_SERVICE_DISABLED',
+      retryable: false,
+      status: 403,
+    });
+    expect(error.message).toContain('not enabled for the project');
+    expect(error.message).toContain('Signing in again will not help');
+    expect(error.message).toContain('has not been used in project 123');
+  });
+
+  it('surfaces the google message for a 403 scope failure', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 403,
+            message: 'Request had insufficient authentication scopes.',
+            details: [{ reason: 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' }],
+          },
+        }),
+        {
+          headers: { 'content-type': 'application/json' },
+          status: 403,
+        },
+      ),
+    );
+
+    const error = await fetchWithAuth(
+      'https://www.googleapis.com/tasks/v1/users/@me/lists',
+      {},
+      'narrow-token',
+    ).catch((thrown: unknown) => thrown as GoogleApiError);
+
+    expect(error).toMatchObject<Partial<GoogleApiError>>({
+      code: 'GOOGLE_API_INSUFFICIENT_SCOPE',
+      status: 403,
+    });
+    expect(error.message).toContain('sign in again');
+    expect(error.message).toContain('insufficient authentication scopes');
+  });
+
   it('maps 429 responses to retryable rate limit errors', async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ error: 'rate_limited' }), {
