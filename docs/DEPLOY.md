@@ -10,18 +10,18 @@ Use the LangGraph Cloud dashboard or GitHub integration for the actual hosted de
 
 ## Prerequisites
 
-- `backend/.env` populated with `GOOGLE_API_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, and `LANGSMITH_PROJECT=troli-v1`
+- `backend/.env` populated with `GOOGLE_API_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_TRACING=true`, and `LANGSMITH_PROJECT=aisist-v1`
 - `pnpm install`
 - A LangGraph Cloud workspace with permission to create an API key
-- A Google access token for a test account that is also allowed through the Troli OAuth consent screen
+- A Google access token for a test account that is also allowed through the Aisist OAuth consent screen
 
 ## Pre-Deploy Checks
 
 Run these before pushing a deploy:
 
 ```bash
-pnpm --filter @troli/backend typecheck
-pnpm --filter @troli/backend dev
+pnpm --filter @aisist/backend typecheck
+pnpm --filter @aisist/backend dev
 ```
 
 The backend project definition lives at `backend/langgraph.json`, and the graph name is `agent`. The mobile client defaults to `assistant_id=agent`, so a standard deploy does not need an override.
@@ -51,7 +51,7 @@ LANGGRAPH_API_URL=<your-langgraph-cloud-url> \
 LANGGRAPH_API_KEY=<your-langgraph-cloud-api-key> \
 GOOGLE_ACCESS_TOKEN=<google-access-token> \
 GOOGLE_ACCOUNT_EMAIL=<test-user-email> \
-pnpm --filter @troli/backend run verify:cloud
+pnpm --filter @aisist/backend run verify:cloud
 ```
 
 Optional overrides:
@@ -81,7 +81,7 @@ That confirms:
 After the cloud verification script passes:
 
 ```bash
-pnpm --filter @troli/mobile start
+pnpm --filter @aisist/mobile start
 ```
 
 Sign in on the iOS device, send one short message, kill the app, reopen it, and confirm the conversation hydrates from the same thread.

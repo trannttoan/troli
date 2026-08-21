@@ -1,4 +1,4 @@
-# Technical Requirements Document — Troli
+# Technical Requirements Document — Aisist
 
 **Version:** 1.0 (Draft)
 **Status:** Draft
@@ -9,7 +9,7 @@
 
 ## 1. System Architecture
 
-Troli is split into two components: a React Native mobile client and a Node.js backend running the LangGraph.js agent. The mobile client handles authentication and the chat UI. The backend handles LLM calls, tool execution, state persistence, and Google API calls.
+Aisist is split into two components: a React Native mobile client and a Node.js backend running the LangGraph.js agent. The mobile client handles authentication and the chat UI. The backend handles LLM calls, tool execution, state persistence, and Google API calls.
 
 The client never calls Google product APIs (Calendar, Tasks, Gmail) directly. OAuth endpoints (token exchange, userinfo) are called client-side during authentication. For all product-data operations, the client passes the user's OAuth access token to the backend with each request, and the backend uses that token to make Google API calls on the user's behalf.
 
@@ -291,7 +291,7 @@ const update_calendar_event = tool(
 The agent's system prompt is constructed dynamically per request. It includes:
 
 ```
-You are Troli, a personal assistant that manages the user's Google Calendar,
+You are Aisist, a personal assistant that manages the user's Google Calendar,
 Google Tasks, and Gmail.
 
 Today's date: {current_date}
@@ -323,7 +323,7 @@ The timezone is read from the device via `expo-localization` and sent by the cli
 
 ### 3.7 Thread and Conversation Management
 
-Each user has one thread, identified by a deterministic thread ID derived from their Google account email (e.g., `troli-{sha256(email)}`).
+Each user has one thread, identified by a deterministic thread ID derived from their Google account email (e.g., `aisist-{sha256(email)}`).
 
 **7-day message window:** The full conversation history stays in the PostgreSQL checkpointer — nothing is deleted from storage. Instead, a preprocessing step in the graph filters messages to the past 7 days before passing them to the LLM. The LLM only sees recent messages, but the full history remains available in the database for profile building and debugging.
 
@@ -400,7 +400,7 @@ All agent runs are traced in LangSmith. Integration is automatic when these envi
 ```
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=<your-key>
-LANGSMITH_PROJECT=troli-v1
+LANGSMITH_PROJECT=aisist-v1
 ```
 
 **What gets traced:**
@@ -437,7 +437,7 @@ The client includes the user's Google access token in the `Authorization` header
 
 1. Client clears all tokens from `expo-secure-store` (`auth_access_token`, `auth_refresh_token`, `auth_token_expiry`, `auth_user_email`).
 2. Client navigates to the sign-in screen.
-3. On re-auth, the thread ID is re-derived deterministically from the user's email (`troli-{sha256(email)}`), so the user reconnects to the same conversation even after reinstall or device change.
+3. On re-auth, the thread ID is re-derived deterministically from the user's email (`aisist-{sha256(email)}`), so the user reconnects to the same conversation even after reinstall or device change.
 4. No backend call is needed — the backend holds no session state or tokens.
 
 ---
@@ -502,7 +502,7 @@ All Google API calls go through a shared `fetchWithAuth` function that:
 
 ## 8. Security Considerations
 
-- **Client-to-backend authentication.** The backend validates the Google access token on each request by calling Google's tokeninfo endpoint (`https://oauth2.googleapis.com/tokeninfo?access_token=...`). This confirms the token is valid and extracts the user's email. The backend then verifies that the requested `thread_id` matches `troli-{sha256(email)}` — if not, the request is rejected with 403. This ensures users can only access their own thread. For production scale, add a dedicated auth layer (e.g., short-lived JWT issued after token validation).
+- **Client-to-backend authentication.** The backend validates the Google access token on each request by calling Google's tokeninfo endpoint (`https://oauth2.googleapis.com/tokeninfo?access_token=...`). This confirms the token is valid and extracts the user's email. The backend then verifies that the requested `thread_id` matches `aisist-{sha256(email)}` — if not, the request is rejected with 403. This ensures users can only access their own thread. For production scale, add a dedicated auth layer (e.g., short-lived JWT issued after token validation).
 - **Tokens never touch the backend's storage.** The client sends the Google access token per request. The backend passes it to tool functions via LangGraph's `config.configurable` (not graph state), which is not serialized by the checkpointer. The token exists only in memory for the duration of the request.
 - **Token refresh happens client-side only.** The backend never sees the refresh token.
 - **HTTPS everywhere.** All client-to-backend and backend-to-Google communication is over TLS.

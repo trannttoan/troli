@@ -1,33 +1,33 @@
-<h1 align="center">Troli</h1>
+<h1 align="center">Aisist</h1>
 
 <p align="center">
-  <a href="https://github.com/trannttoan/troli/actions/workflows/ci.yml"><img src="https://github.com/trannttoan/troli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/github/license/trannttoan/troli" alt="License">
+  <a href="https://github.com/trannttoan/aisist/actions/workflows/ci.yml"><img src="https://github.com/trannttoan/aisist/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/github/license/trannttoan/aisist" alt="License">
 </p>
 
 A conversational AI assistant for iOS that helps you manage your Google Calendar, Tasks, and Gmail from a single chat interface.
 
 ## Overview
 
-Troli is a personal assistant that brings your Google Calendar, Tasks, and Gmail together in one place. Instead of juggling three separate apps, you tell Troli what you need in plain language ("move my 2pm to Thursday," "show unread emails from Sarah," "add a task to my work list") and an AI agent figures out the right API calls, executes them, and streams the result back to you in real time. Updates and deletes require your approval before executing, so you stay in control of anything that changes existing data.
+Aisist is a personal assistant that brings your Google Calendar, Tasks, and Gmail together in one place. Instead of juggling three separate apps, you tell Aisist what you need in plain language ("move my 2pm to Thursday," "show unread emails from Sarah," "add a task to my work list") and an AI agent figures out the right API calls, executes them, and streams the result back to you in real time. Updates and deletes require your approval before executing, so you stay in control of anything that changes existing data.
 
 ## Features
 
 ### Search and Discovery
 
-Troli can pull information from your calendar, tasks, and emails all at once. Ask something like "what's on my plate today" and the agent gathers your upcoming events, pending tasks, and recent emails into a single answer. For Gmail specifically, you describe what you're looking for in plain language ("unread emails from Sarah last week," "messages with attachments from June") and the agent translates that into the right search query behind the scenes.
+Aisist can pull information from your calendar, tasks, and emails all at once. Ask something like "what's on my plate today" and the agent gathers your upcoming events, pending tasks, and recent emails into a single answer. For Gmail specifically, you describe what you're looking for in plain language ("unread emails from Sarah last week," "messages with attachments from June") and the agent translates that into the right search query behind the scenes.
 
 ### Reliable Creation and Updates
 
-You can create events, tasks, and more just by describing them. After every creation, the agent confirms exactly what it made so you can catch mistakes early. For updates and deletes, Troli takes an extra step: it pauses the conversation and shows you an approval card with the proposed change. Nothing gets modified or removed until you explicitly approve it.
+You can create events, tasks, and more just by describing them. After every creation, the agent confirms exactly what it made so you can catch mistakes early. For updates and deletes, Aisist takes an extra step: it pauses the conversation and shows you an approval card with the proposed change. Nothing gets modified or removed until you explicitly approve it.
 
 ### Conversation Memory
 
-Troli remembers what you've discussed over a rolling window of recent messages, so you can reference earlier parts of the conversation naturally ("actually, move that meeting to Wednesday instead"). Over time, the agent also learns your habits and preferences, like which calendar you use for work, how you like your task lists organized, or your preferred meeting duration, so it can anticipate what you need with less back-and-forth.
+Aisist remembers what you've discussed over a rolling window of recent messages, so you can reference earlier parts of the conversation naturally ("actually, move that meeting to Wednesday instead"). Over time, the agent also learns your habits and preferences, like which calendar you use for work, how you like your task lists organized, or your preferred meeting duration, so it can anticipate what you need with less back-and-forth.
 
 ## How It Works
 
-Troli is split into two components: a React Native mobile client and a LangGraph.js backend. The client handles authentication and the chat UI. The backend runs the AI agent, executes tools against the Google APIs, and manages conversation state. The two communicate over REST and SSE.
+Aisist is split into two components: a React Native mobile client and a LangGraph.js backend. The client handles authentication and the chat UI. The backend runs the AI agent, executes tools against the Google APIs, and manages conversation state. The two communicate over REST and SSE.
 
 ```
 ┌──────────────────────┐         ┌──────────────────────────────────┐
@@ -57,7 +57,7 @@ Agent responses stream token-by-token to the client via Server-Sent Events (SSE)
 
 ### Authentication and Security
 
-The client handles the full OAuth lifecycle: PKCE authorization code flow via `expo-auth-session`, token storage in the iOS Keychain via `expo-secure-store`, and silent refresh with a 5-minute expiry buffer and a mutex to prevent concurrent refresh requests. The backend never sees the refresh token and never persists the access token. Instead, the client passes the access token with each request, and the backend validates it against Google's tokeninfo endpoint. The backend also verifies that the thread ID in the request matches `troli-{sha256(email)}` to prevent cross-user access.
+The client handles the full OAuth lifecycle: PKCE authorization code flow via `expo-auth-session`, token storage in the iOS Keychain via `expo-secure-store`, and silent refresh with a 5-minute expiry buffer and a mutex to prevent concurrent refresh requests. The backend never sees the refresh token and never persists the access token. Instead, the client passes the access token with each request, and the backend validates it against Google's tokeninfo endpoint. The backend also verifies that the thread ID in the request matches `aisist-{sha256(email)}` to prevent cross-user access.
 
 ### Human-in-the-Loop
 

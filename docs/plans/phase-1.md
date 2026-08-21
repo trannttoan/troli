@@ -28,7 +28,7 @@ The goal is a fully detailed plan that someone can pick up and implement without
 
 ## Patterns & Conventions Observed
 
-- **Monorepo:** pnpm workspaces, `@troli/backend` and `@troli/mobile` packages
+- **Monorepo:** pnpm workspaces, `@aisist/backend` and `@aisist/mobile` packages
 - **TypeScript strict mode** in both packages
 - **Backend:** LangGraph.js `StateGraph(MessagesAnnotation)`, Zod for validation, LangGraph Cloud hosting
 - **Mobile:** Expo 56, Zustand for state, `expo-auth-session` for OAuth, `expo-secure-store` for tokens
@@ -43,7 +43,7 @@ The goal is a fully detailed plan that someone can pick up and implement without
 
 1. **LangGraph Cloud API surface:** Thread/run endpoints are provided by LangGraph Cloud — backend doesn't need custom HTTP server. The agent graph is deployed and LangGraph Cloud handles `/threads`, `/runs`, SSE streaming. Mobile hits LangGraph Cloud directly (or via its SDK).
 2. **No custom backend server needed in Phase 1:** LangGraph Cloud provides the HTTP API. Backend code is just the graph definition deployed to LangGraph Cloud.
-3. **Google OAuth:** Phase 1 targets iOS physical device only (dev client build). `expo-auth-session` opens the system browser for the Google consent screen and redirects back via the app scheme (`com.troli.app`). No Simulator, Expo Go, or Android support needed in Phase 1.
+3. **Google OAuth:** Phase 1 targets iOS physical device only (dev client build). `expo-auth-session` opens the system browser for the Google consent screen and redirects back via the app scheme (`com.aisist.app`). No Simulator, Expo Go, or Android support needed in Phase 1.
 4. **SSE on React Native:** `EventSource` API is limited in RN. May need polyfill or manual `fetch` with `ReadableStream`.
 5. **Token refresh race condition:** Multiple concurrent requests during refresh need mutex — the TRD specifies a promise-based mutex pattern.
 6. **LangGraph Cloud deployment:** Requires `langgraph-cli` or GitHub integration. First deploy is a risk point.
@@ -68,7 +68,7 @@ Mobile talks directly to LangGraph Cloud. LangGraph Cloud API key embedded in mo
 
 The embedded API key is the sole credential for all LangGraph Cloud operations. A tester who extracts it can:
 
-1. **Privacy:** Read any user's thread (derive thread ID from email via the extractable `TROLI_NAMESPACE`, then call `GET /threads/{id}/state`). Conversation text only — no tokens or API data in thread state.
+1. **Privacy:** Read any user's thread (derive thread ID from email via the extractable `AISIST_NAMESPACE`, then call `GET /threads/{id}/state`). Conversation text only — no tokens or API data in thread state.
 2. **Integrity:** Create arbitrary threads or inject messages into other users' threads via `POST /threads/{id}/runs/stream`.
 3. **Cost abuse:** Execute unbounded runs against the Gemini backend, generating LLM compute costs with no per-user rate limit.
 
@@ -85,20 +85,20 @@ Google token validation only runs inside graph execution (`POST /threads/{id}/ru
 
 ### Thread ID format
 
-LangGraph Cloud requires `thread_id` to be a valid UUID (`string<uuid>`). The TRD's `troli-{sha256(email)}` format is not compatible. Use **UUID v5** (name-based, deterministic) with a fixed namespace:
+LangGraph Cloud requires `thread_id` to be a valid UUID (`string<uuid>`). The TRD's `aisist-{sha256(email)}` format is not compatible. Use **UUID v5** (name-based, deterministic) with a fixed namespace:
 
 ```typescript
 import { v5 as uuidv5 } from 'uuid';
 
-const TROLI_NAMESPACE = 'e587b8a0-3e1a-4c5d-9f2b-1a8c4d6e7f90'; // fixed, arbitrary
+const AISIST_NAMESPACE = 'e587b8a0-3e1a-4c5d-9f2b-1a8c4d6e7f90'; // fixed, arbitrary
 function generateThreadId(email: string): string {
-  return uuidv5(email, TROLI_NAMESPACE);
+  return uuidv5(email, AISIST_NAMESPACE);
 }
 ```
 
 Same email always produces the same UUID, enabling reconnection across reinstalls/devices. Add `uuid` package (+ `@types/uuid` devDep) to both `mobile` and `backend`.
 
-**Note:** This supersedes the `troli-{sha256(email)}` format described in `docs/TRD.md` and `docs/BUILD.md`. Those docs should be updated as part of implementation to reflect the UUID v5 format.
+**Note:** This supersedes the `aisist-{sha256(email)}` format described in `docs/TRD.md` and `docs/BUILD.md`. Those docs should be updated as part of implementation to reflect the UUID v5 format.
 
 ### LangGraph Cloud API contracts
 
@@ -208,7 +208,7 @@ All messages must have `additional_kwargs.timestamp` for the windowing logic to 
 - `GOOGLE_API_KEY` — Gemini API key (see `docs/SETUP.md` section 5)
 - `LANGSMITH_API_KEY` — LangSmith API key (see `docs/SETUP.md` section 6)
 - `LANGSMITH_TRACING=true` — already in `backend/.env.example`
-- `LANGSMITH_PROJECT=troli-v1` — already in `backend/.env.example`
+- `LANGSMITH_PROJECT=aisist-v1` — already in `backend/.env.example`
 
 **OAuth scopes (Phase 1 only):**
 
@@ -244,7 +244,7 @@ Before any backend subtask begins, confirm how to read the current thread's ID f
   - `backend/src/prompt.ts` — system prompt template with `{current_date}`, `{timezone}`, `{current_time}`
   - `backend/src/utils/window-messages.ts` — `windowMessages()`: filter by timestamp within 7-day cutoff, slice to last 200
   - `backend/src/utils/timestamp.ts` — stamp messages with `additional_kwargs.timestamp`
-- **Acceptance criteria:** `pnpm --filter @troli/backend typecheck` passes. Agent responds to messages in LangGraph Studio via `npx @langchain/langgraph-cli dev`.
+- **Acceptance criteria:** `pnpm --filter @aisist/backend typecheck` passes. Agent responds to messages in LangGraph Studio via `npx @langchain/langgraph-cli dev`.
 - **Scope:** Medium (4 files)
 
 ### Subtask 2: Mobile — Auth flow (OAuth + token management + sign-in screen)
@@ -265,7 +265,7 @@ Before any backend subtask begins, confirm how to read the current thread's ID f
   - `mobile/src/navigation/RootNavigator.tsx` — conditional auth/chat routing
   - `mobile/App.tsx` — navigation wrapper + auth init
   - `mobile/.env.example` — add `EXPO_PUBLIC_LANGGRAPH_API_URL`, `EXPO_PUBLIC_LANGGRAPH_API_KEY` (keep existing `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`)
-- **Acceptance criteria:** User signs in on iOS physical device, tokens stored in SecureStore, session survives app restart. Refresh failure forces re-auth. `pnpm --filter @troli/mobile typecheck` passes.
+- **Acceptance criteria:** User signs in on iOS physical device, tokens stored in SecureStore, session survives app restart. Refresh failure forces re-auth. `pnpm --filter @aisist/mobile typecheck` passes.
 - **Scope:** Medium (6 files)
 
 ### Subtask 3: Mobile — Chat UI + SSE streaming + end-to-end wiring
@@ -284,7 +284,7 @@ Before any backend subtask begins, confirm how to read the current thread's ID f
 - **Concurrency:** LangGraph Cloud allows only one active run per thread. The client must handle two cases: (1) **Double-send:** disable the send button and input while a run is streaming; re-enable when the stream completes or errors. (2) **App reopen during active run:** the bootstrap flow (see "Bootstrap flow" in API contracts) calls `GET /threads/{id}` which returns `status: "idle"|"busy"|"interrupted"|"error"`. If status is `busy`, show a loading state and poll `GET /threads/{id}` (e.g., every 2s, max 30s). On resolution: if `idle`, hydrate messages via `GET /threads/{id}/state`. If `error`, hydrate whatever messages exist and allow the user to send a new message (the failed run doesn't block future runs). If polling times out (still `busy` after 30s), treat as error — hydrate and re-enable input. If `interrupted`, hydrate and re-enable (Phase 1 has no HITL, so this shouldn't occur but is safe to treat as idle).
 - **Disconnect / ambiguous failure:** If the client disconnects after `POST /runs/stream` is accepted but before consuming the full response, the human message may already be committed to thread state. On next app open, the bootstrap hydration will show the actual thread state (including any committed messages and the agent's response if the run completed server-side). In Phase 1 this is sufficient — no write tools exist, so a duplicate human turn only produces a duplicate chat response. **Phase 2+ (with write tools) must add a client-side message ID or deduplication mechanism** to prevent duplicate tool executions from ambiguous retries.
 - **Acceptance criteria:**
-  - **Local (before Subtask 5):** `pnpm --filter @troli/mobile typecheck` passes. Backend responds to curl / LangGraph Studio via `langgraph dev`. Mobile chat code compiles and is structurally complete — on-device testing blocked until cloud URL is available.
+  - **Local (before Subtask 5):** `pnpm --filter @aisist/mobile typecheck` passes. Backend responds to curl / LangGraph Studio via `langgraph dev`. Mobile chat code compiles and is structurally complete — on-device testing blocked until cloud URL is available.
   - **Cloud (after Subtask 5):** Conversation persists across app restarts. Thread creation is idempotent via `if_exists: "do_nothing"`. Full round-trip on iOS physical device against the deployed backend.
 - **Scope:** Large (8 files)
 
@@ -298,7 +298,7 @@ Before any backend subtask begins, confirm how to read the current thread's ID f
   - **Missing `access_token` in config:** Reject immediately — do not call tokeninfo.
 - **Files:**
   - `backend/src/utils/auth.ts` — `validateGoogleToken()`, `verifyThreadAuthorization()` (uses `generateThreadId(email)` with UUID v5)
-  - `backend/src/utils/thread.ts` — `generateThreadId(email)` using UUID v5 with `TROLI_NAMESPACE` (same implementation as mobile)
+  - `backend/src/utils/thread.ts` — `generateThreadId(email)` using UUID v5 with `AISIST_NAMESPACE` (same implementation as mobile)
   - `backend/src/agent.ts` — update preprocess node with auth validation
 - **Acceptance criteria:** Invalid/expired tokens cause the graph to return an error (not an LLM response). Thread ID mismatch (email doesn't derive to the run's thread) rejected. Tokeninfo timeout returns retryable error. Valid requests proceed. Note: this only protects run execution (`POST /threads/{id}/runs`). Thread create/read endpoints remain gated by API key only — see "Known limitation" in the API layer decision section.
 - **Scope:** Small (3 files)
@@ -322,7 +322,7 @@ Before any backend subtask begins, confirm how to read the current thread's ID f
 - **Files:**
   - `backend/src/__tests__/agent.test.ts` — full graph pipeline (auth gating, preprocessing, agent node invocation, end-to-end message flow)
   - `backend/src/__tests__/prompt.test.ts` — system prompt builder (timezone normalization, date/time formatting, identity preamble, rules section)
-  - `backend/src/utils/__tests__/auth.test.ts` — token validation (mock `fetch` to tokeninfo, email normalization, 5xx/timeout retryable errors), thread authorization (UUID v5 match/mismatch/missing), `isTroliAuthError` type guard
+  - `backend/src/utils/__tests__/auth.test.ts` — token validation (mock `fetch` to tokeninfo, email normalization, 5xx/timeout retryable errors), thread authorization (UUID v5 match/mismatch/missing), `isAisistAuthError` type guard
   - `backend/src/utils/__tests__/timestamp.test.ts` — `getMessageTimestamp` (valid, null, NaN, Infinity), `stampMessage` (explicit/default timestamp, preserves kwargs/content), `stampLatestHumanMessage` (last unstamped, skip stamped, no-op cases)
   - `backend/src/utils/__tests__/window-messages.test.ts` — windowing logic (7-day filter, 200-msg cap, missing timestamps)
   - `mobile/src/store/__tests__/auth.test.ts` — token refresh (< 5min trigger), mutex (concurrent refreshes), sign-out (clears SecureStore + chat store), initialize from storage, partial session cleanup, force-reauth on refresh failure, non-fatal refresh error
@@ -332,5 +332,5 @@ Before any backend subtask begins, confirm how to read the current thread's ID f
   - `mobile/src/utils/__tests__/auth.test.ts` — direct tests for Google auth utilities: `buildSessionFromAuthResponse` (success, cancel/dismiss, exchange error, missing refresh token, userinfo failure, missing email), `refreshGoogleAccessToken` (success, preserved refresh token, 400/401 force-reauth, 5xx transient, missing access_token, timeout, network failure), error type guards
   - `backend/package.json` — add `vitest` devDep, `"test": "vitest run"` script
   - `mobile/package.json` — add `jest-expo` + `@testing-library/react-native` devDeps, `"test": "jest"` script, Jest config (`preset: "jest-expo"`)
-- **Acceptance criteria:** `pnpm --filter @troli/backend test` and `pnpm --filter @troli/mobile test` pass. 53 backend tests, 68 mobile tests (121 total).
+- **Acceptance criteria:** `pnpm --filter @aisist/backend test` and `pnpm --filter @aisist/mobile test` pass. 53 backend tests, 68 mobile tests (121 total).
 - **Scope:** Medium (12 files)
