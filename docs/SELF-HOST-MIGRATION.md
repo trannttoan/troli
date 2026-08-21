@@ -123,6 +123,15 @@ Langfuse down ⇒ spans dropped, runs unaffected.
 pnpm --filter @aisist/backend add @langfuse/langchain @langfuse/otel @opentelemetry/sdk-node
 ```
 
+**Security floor:** `@langchain/langgraph` must be ≥ 1.4.12 and
+`@langchain/langgraph-checkpoint` ≥ 1.1.4 —
+[GHSA-j87f-x5h5-gr75](https://github.com/langchain-ai/langgraphjs/security/advisories/GHSA-j87f-x5h5-gr75)
+(insecure deserialization in `JsonPlusSerializer`, CVSS 7.7) allows arbitrary code
+execution when a checkpoint containing attacker-crafted structured data (e.g.
+`additional_kwargs`) is restored. Auth is not a mitigation — an authorized caller can
+plant the payload — so never downgrade below these versions. The langgraph-cli 1.4.x
+line ships the matching patched dev-server harness.
+
 ### 3.2 `backend/src/agent.ts`
 
 Two additions (shape below — confirm exact API against the Langfuse v4 docs when
@@ -241,6 +250,10 @@ systemctl --user restart docker    # briefly bounces Langfuse; it self-heals
 cd ~/apps/aisist/backend
 npx @langchain/langgraph-cli build -t aisist-backend:latest
 ```
+
+The CLI pulls the latest `langgraphjs-api` base image by default — do **not** pass
+`--no-pull`: the server runtime inside the base image has its own copy of the checkpoint
+serializer and must also carry the GHSA-j87f-x5h5-gr75 patch (§3.1).
 
 If the container later fails on DB config, inspect what the generated image expects:
 `npx @langchain/langgraph-cli dockerfile -` from `backend/`.
