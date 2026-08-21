@@ -6,6 +6,9 @@ import {
 } from '@langchain/langgraph';
 import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { CallbackHandler } from '@langfuse/langchain';
+import { LangfuseSpanProcessor } from '@langfuse/otel';
+import { NodeSDK } from '@opentelemetry/sdk-node';
 import {
   BaseMessage,
   RemoveMessage,
@@ -119,4 +122,12 @@ export const workflow = new StateGraph(AgentState)
   .addConditionalEdges('agent', toolsCondition, ['tools', '__end__'])
   .addEdge('tools', 'agent');
 
-export const graph = workflow.compile();
+// Tracing is fail-open: without Langfuse keys no span processor is registered,
+// so the handler's spans hit a no-op tracer and runs proceed untraced.
+if (process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY) {
+  new NodeSDK({ spanProcessors: [new LangfuseSpanProcessor()] }).start();
+}
+
+export const graph = workflow.compile().withConfig({
+  callbacks: [new CallbackHandler()],
+});

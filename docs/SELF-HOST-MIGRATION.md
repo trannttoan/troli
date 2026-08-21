@@ -1,240 +1,513 @@
-# Migration — LangGraph Cloud + LangSmith → Self-Hosted Lite + Langfuse
+# Self-Host Migration — LangGraph Cloud → Desktop, LangSmith → Langfuse
 
-Replaces the hosted LangGraph Cloud deployment with a self-hosted LangGraph server, and
-LangSmith tracing with Langfuse. Supersedes steps 5 and 6 of
-[RENAME-MIGRATION.md](RENAME-MIGRATION.md).
+Moves the backend off LangGraph Cloud onto a standalone LangGraph server running on the
+gaming desktop (Windows 11 + WSL2, rootless Docker), reachable from the phone over
+Tailscale. Tracing moves from LangSmith to the self-hosted Langfuse already running on the
+desktop.
 
-Not started. §0 and §1 are the orientation; read §2 before designing anything.
+This document consolidates and supersedes:
+
+- `aisist-full-setup.md` (repo root) — app + desktop setup template
+- the app-facing parts of `gaming-desktop-server-setup.md` (repo root)
+- the previous draft of this file
+- steps 5–6 of [RENAME-MIGRATION.md](RENAME-MIGRATION.md)
+
+Facts below were verified against the repo at `c15b301` and against current LangChain and
+Langfuse docs (Aug 2026). Anything still uncertain is marked **verify**.
 
 ---
 
 ## 0. Where things stand
 
-- The Troli → Aisist rename is **merged** (`7e3153e`, PR #11). Sign-in is verified working on
-  device against the updated Google OAuth client.
-- The app currently runs on **LangGraph Cloud** at `https://troli-<hash>.us.langgraph.app`,
-  with the mobile client authenticating via an `x-api-key` header holding a LangSmith
-  personal token.
-- `pnpm -r run typecheck` is clean; 121 backend (vitest) and 100 mobile (jest) tests pass.
-- Nothing in this document has been implemented.
+**Done:**
 
-## 1. Current architecture
+- Troli → Aisist rename merged (`7e3153e`, PR #11). Sign-in verified on device.
+- Desktop set up per `gaming-desktop-server-setup.md` steps 1–6, with these confirmed
+  specifics:
+  - **Option B** distro hardening: the existing Ubuntu distro has `automount`/`interop`
+    disabled — no `/mnt/c`, no Windows credential access from WSL.
+  - Rootless Docker as the unprivileged `services` user, linger enabled, WSL keep-alive
+    scheduled task in place (reboot + login brings everything back).
+  - Langfuse self-hosted at `127.0.0.1:3000`, served on the tailnet at
+    `https://<desktop>.<tailnet>.ts.net` (port 443) via `tailscale serve`.
+  - Tailnet ACLs hardened: phone/Mac reach the desktop only on enumerated ports
+    (currently 443, possibly 22). Mac and phone are on the tailnet.
+- Steps 7+ of the desktop guide (GPU/vLLM/monitoring/training) are **not** done and are
+  not needed for this migration — the backend calls Gemini via `GOOGLE_API_KEY`.
 
-The mobile client talks **directly** to LangGraph Cloud. There is no server of ours in the
-path. `mobile/src/services/langgraph.ts` hand-rolls the HTTP calls (no
-`@langchain/langgraph-sdk` in either workspace package) and hits four endpoints:
+**Current app state:**
 
-| Endpoint                    | Method | Used for                   | Enters the graph? |
-| --------------------------- | ------ | -------------------------- | ----------------- |
-| `/threads`                  | POST   | bootstrap on first sign-in | No                |
-| `/threads/{id}`             | GET    | hydrate on launch          | No                |
-| `/threads/{id}/state`       | GET    | load conversation history  | No                |
-| `/threads/{id}/runs/stream` | POST   | send a message / resume    | **Yes** (SSE)     |
+- Mobile talks directly to LangGraph Cloud. `mobile/src/services/langgraph.ts` hand-rolls
+  the HTTP calls (no `@langchain/langgraph-sdk` anywhere in the workspace) against four
+  endpoints: `POST /threads`, `GET /threads/{id}`, `GET /threads/{id}/state`,
+  `POST /threads/{id}/runs/stream` (SSE).
+- Every call carries `x-api-key` (`mobile/src/services/langgraph.ts:335`) holding a
+  LangSmith personal token from `EXPO_PUBLIC_LANGGRAPH_API_KEY`. The client refuses to
+  start without a non-empty value (`langgraph.ts:93`).
+- The Google access token travels in the run body as `config.configurable.access_token`
+  and is read back by `backend/src/utils/tool-config.ts`.
+- Auth runs inside the graph: `preprocessNode` (`backend/src/agent.ts`) calls
+  `validateGoogleToken` (Google tokeninfo) and `verifyThreadAuthorization`. Thread IDs are
+  `uuidv5(email, AISIST_NAMESPACE)`, with the namespace duplicated in
+  `backend/src/utils/thread.ts` and `mobile/src/utils/thread.ts`.
+- `backend/langgraph.json` already exists: graph `agent` → `./src/agent.ts:graph`,
+  `node_version` 22, `dependencies: ["."]`, `env: ".env"` (dev only).
+- CLI is `@langchain/langgraph-cli@^1.2.5` with `dev`/`build`/`up`/`dockerfile` wired as
+  pnpm scripts (`langgraph:build` etc.).
 
-Every call carries `x-api-key: <LangSmith token>` (`mobile/src/services/langgraph.ts:335`).
-That single shared key is the _only_ thing gating all four.
+## 1. Target architecture
 
-**How the Google token flows.** The client puts it in the request body, not a header —
-`config.configurable.access_token`, built in `streamRun` and `resumeRun`
-(`mobile/src/services/langgraph.ts:180` and `:204`). The graph reads it back out via
-`backend/src/utils/tool-config.ts:9` to authorize Google API calls.
-
-**Where auth runs today.** Inside the graph, in `preprocessNode`
-(`backend/src/agent.ts:80-81`):
-
-```ts
-const { email } = await validateGoogleToken(config);
-verifyThreadAuthorization(config, email);
-```
-
-Both take a `LangGraphRunnableConfig` and read from `config.configurable` — they are **not**
-HTTP middleware and cannot be dropped into a proxy unchanged. Adapting them means either
-constructing a synthetic config at the proxy or extracting the tokeninfo call out of
-`validateGoogleToken`.
-
-**The consequence, already documented in this repo.** Because validation only happens during
-graph execution, the three non-run endpoints have no user-level auth at all. See
-`docs/plans/phase-1.md:68-74`, which spells out the resulting privacy, integrity, and
-cost-abuse exposure — including that thread IDs are `uuidv5(email, AISIST_NAMESPACE)` with
-the namespace committed to this repo, so deriving another user's thread ID from their email
-address is trivial.
-
-On Cloud, `x-api-key` is what keeps that from being reachable. **Self-hosting removes that
-gate.** Closing it is the point of §2, not a nice-to-have.
-
-## 2. Authentication — the blocking design decision
-
-**Custom auth is not available on Self-Hosted Lite.** It is restricted to Managed Cloud and
-Enterprise self-hosted plans; a Lite deployment that declares an `auth` block in
-`langgraph.json` fails with `ValueError: Custom authentication is only available in Managed
-Cloud or Enterprise` ([langgraph#5390](https://github.com/langchain-ai/langgraph/issues/5390)).
-
-So: **put a thin HTTP proxy in front of a private LangGraph server.**
+**Current phase — Tailscale direct, no proxy:**
 
 ```
-mobile app ──Bearer <google token>──▶ proxy ──▶ LangGraph server (private)
-                                        │
-                                        ├─ validates the token (tokeninfo)
-                                        ├─ derives thread ID from the email
-                                        ├─ rejects mismatched thread IDs
-                                        └─ rewrites config.configurable.access_token
+iPhone (Expo dev build, Tailscale VPN on)
+   │  https://<desktop>.<tailnet>.ts.net:8445
+   ▼
+Windows host ── tailscale serve (TLS, tailnet-only) ──▶ localhost:8123 (WSL2 relay)
+   ▼
+Ubuntu WSL2, rootless Docker (services user)
+   ├─ aisist api      127.0.0.1:8123 → container :8000   (langgraph standalone image)
+   ├─ postgres:16     (threads, checkpoints — internal network only)
+   ├─ redis:7         (run queue — internal network only)
+   └─ langfuse stack  127.0.0.1:3000 (already running)
+        └── shared docker network: agents-shared
 ```
 
-- The LangGraph server binds to localhost or a private network. **Never** exposed publicly.
-- The proxy is the only public surface. The mobile client ships **no** API key — only the
-  Google token it already holds. `x-api-key` disappears from
-  `mobile/src/services/langgraph.ts:335`, and `EXPO_PUBLIC_LANGGRAPH_API_KEY` is deleted
-  from `mobile/.env` and `.env.example`.
+Port plan on the tailnet: 443 = Langfuse (taken), **8445 = aisist API**. 8443/8444 stay
+reserved for vLLM/Grafana if desktop-guide steps 7+ ever happen.
 
-### What the proxy must do per endpoint
+**Later phase (unchanged plumbing):** an OCI VPS joins the tailnet as the public front
+door, runs the auth proxy (§8), and calls this same `:8445` endpoint. Nothing built here
+gets redone.
 
-All four require a valid Google access token. Beyond that:
+## 2. Design decisions (and why)
 
-- **`POST /threads`** — derive the thread ID from the validated email; reject any
-  client-supplied ID that doesn't match.
-- **`GET /threads/{id}`, `GET /threads/{id}/state`** — verify `{id}` equals
-  `uuidv5(email, AISIST_NAMESPACE)`. This is the endpoint pair that is currently wide open;
-  getting it wrong reintroduces the exact hole in `docs/plans/phase-1.md:71`.
-- **`POST /threads/{id}/runs/stream`** — same thread check, plus **rewrite**
-  `config.configurable.access_token` in the body to the token the proxy just validated.
-  Do not pass the client's value through: forwarding it unchecked lets a caller authenticate
-  to the proxy with one token and drive Google API calls with another. The graph's own
-  `validateGoogleToken` still runs, so this endpoint is defence-in-depth — the other three
-  are where the proxy is load-bearing.
+**Standalone container, not a rewrite.** `langgraph build` wraps the graph in LangChain's
+official API server image, exposing the same HTTP API the mobile client already speaks
+(`/threads`, `/runs/stream` SSE, checkpoints), backed by Postgres + Redis you provide. The
+mobile client needs **no code changes** this phase — only env values.
 
-**SSE passthrough is the hard part.** `/runs/stream` returns a Server-Sent Events stream that
-the chat UI consumes incrementally (`mobile/src/services/sse.ts`, covered by
-`mobile/src/services/__tests__/sse.test.ts`). The proxy must stream chunks through without
-buffering the response — a naive read-then-return will appear to work and then break the
-typing indicator and streamed replies.
+**Auth this phase = network layer + existing graph validation.** Custom auth is not
+available on Self-Hosted Lite ([langgraph#5390](https://github.com/langchain-ai/langgraph/issues/5390));
+the `x-api-key` header is ignored. Known consequence (was `docs/plans/phase-1.md:68-74`):
+the three non-run endpoints have no user-level auth, and thread IDs are derivable from an
+email. That is acceptable **now** because the only devices that can reach port 8445 at all
+are your own (tailnet ACLs), and it stops being acceptable the moment anything public
+fronts this — which is why the VPS phase requires the proxy in §8 before launch. Do not
+shortcut the VPS phase with a shared key baked into the app; that recreates the
+extractable-token problem this migration closes.
 
-> **Do not shortcut this by exposing the Lite server with a shared API key baked into the
-> app.** That is the pattern that made the current LangSmith token extractable from the JS
-> bundle. Verify what auth, if any, Lite gives you out of the box — but plan for none.
+**LangSmith stays as a license, not a tracer.** The standalone server authenticates at
+startup with `LANGSMITH_API_KEY` and needs egress to `https://beacon.langchain.com` for
+license verification ([docs](https://docs.langchain.com/langsmith/deploy-standalone-server)).
+`LANGGRAPH_CLOUD_LICENSE_KEY` is the enterprise variant — only reach for it if startup
+demands it (**verify at first boot**; free-tier key alone is expected to work, with a
+node-execution cap on the free plan). "License verification failed" in container logs is
+always env config, never code. The key now lives server-side, never in a mobile bundle.
 
-## 3. The LangSmith dependency does not fully go away
+**Langfuse via the v4 JS SDK.** The backend is on `@langchain/core` 1.x; LangChain v1
+support landed in `@langfuse/langchain` **≥ 4.3.0**
+([changelog](https://langfuse.com/changelog/2025-10-26-langchain-v1-support)). The old
+`langfuse-langchain` v3 package is the wrong choice here (v1 compat unverified, and it
+reads `LANGFUSE_BASEURL` — no underscore — a classic silent-no-traces trap). v4 is
+OpenTelemetry-based: it needs a `LangfuseSpanProcessor` registered in a `NodeSDK` at
+module load, plus the `CallbackHandler` bound to the graph at compile time (the server
+invokes the graph itself, so per-call callbacks aren't possible). Tracing is fail-open:
+Langfuse down ⇒ spans dropped, runs unaffected.
 
-Self-Hosted Lite requires `LANGSMITH_API_KEY` **and** `LANGGRAPH_CLOUD_LICENSE_KEY` to
-authenticate once at server startup, and needs egress to `https://beacon.langchain.com` for
-license verification and usage reporting unless running air-gapped
-([docs](https://docs.langchain.com/langsmith/deploy-standalone-server)). Failures surface as
-[`INVALID_LICENSE`](https://langchain-ai.github.io/langgraph/troubleshooting/errors/INVALID_LICENSE/).
+## 3. Phase 1 — Backend changes (on the Mac, in this repo)
 
-So the switch drops LangSmith as the _tracing_ backend, not as a dependency. The practical
-difference that matters: that key now lives on **your server**, not in a mobile bundle.
-
-Free tier is capped at 1M nodes executed. Confirm the current cap and whether a separate
-license key is issued for Lite or the LangSmith key doubles as one — the docs conflate the
-two and the naming changed when LangGraph Platform was rebranded to "LangSmith Deployment"
-in late 2025.
-
-## 4. Langfuse wiring
-
-LangGraph Server invokes the graph itself, so you cannot pass callbacks at call time. Attach
-the handler at **compile time** instead, where the server picks it up via `langgraph.json`
-([langfuse#5158](https://github.com/orgs/langfuse/discussions/5158)):
-
-```ts
-// backend/src/agent.ts:122
-import { CallbackHandler } from 'langfuse-langchain';
-
-const langfuseHandler = new CallbackHandler({
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
-  secretKey: process.env.LANGFUSE_SECRET_KEY,
-  baseUrl: process.env.LANGFUSE_HOST,
-});
-
-export const graph = workflow
-  .compile()
-  .withConfig({ callbacks: [langfuseHandler] });
-```
-
-`backend/src/agent.ts:122` is currently `export const graph = workflow.compile();` — a
-one-line change plus the handler construction. Add `langfuse-langchain` to
-`backend/package.json`.
-
-To attach `thread_id` / user identity to Langfuse sessions, subclass the handler and read
-them from the metadata on the first `on_chain_start` event. That is the documented workaround
-for server-executed graphs.
-
-## 5. Env var changes
-
-`backend/.env.example` — remove `LANGSMITH_TRACING`, `LANGSMITH_ENDPOINT`, and
-`LANGSMITH_PROJECT`. Keep `LANGSMITH_API_KEY` (license verification, §3) and add:
-
-```
-LANGGRAPH_CLOUD_LICENSE_KEY=
-LANGFUSE_PUBLIC_KEY=
-LANGFUSE_SECRET_KEY=
-LANGFUSE_HOST=          # your self-hosted Langfuse, or https://cloud.langfuse.com
-```
-
-Set `LANGSMITH_TRACING=false` explicitly so the built-in LangChain tracer stays off — it is
-env-driven with no code references, so nothing else needs touching to disable it.
-
-`mobile/.env.example` — delete `EXPO_PUBLIC_LANGGRAPH_API_KEY` and repoint
-`EXPO_PUBLIC_LANGGRAPH_API_URL` at the proxy.
-
-## 6. Collateral this invalidates
-
-- **`docs/DEPLOY.md`** documents the LangGraph Cloud rollout end to end. Rewrite for the
-  self-hosted path or retire it.
-- **`backend/scripts/verify-langgraph-cloud.mjs`** is a Cloud-specific smoke test — it reads
-  `LANGGRAPH_API_URL` + `LANGGRAPH_API_KEY` and drives a real run. Repoint it at the proxy
-  (dropping the API key, adding a bearer token) or replace it. It is wired to
-  `pnpm --filter @aisist/backend run verify:cloud`, referenced from `docs/DEPLOY.md`.
-- **`docs/TRD.md`** describes the direct client-to-Cloud architecture and the
-  client-to-backend auth model. Both change.
-- **`docs/plans/phase-1.md:68-74`** documents the shared-key exposure as accepted risk. Once
-  the proxy lands, that section should record it as closed.
-- **Tests:** `backend/src/utils/__tests__/auth.test.ts` (12 tests across
-  `validateGoogleToken` / `verifyThreadAuthorization`) will need updating if those signatures
-  change to serve the proxy. `mobile/src/services/__tests__/langgraph.test.ts` asserts the
-  `x-api-key` header.
-
-## 7. Sequence
-
-1. Stand up the self-hosted LangGraph server locally — `langgraph build` / `langgraph up`
-   from `backend/langgraph.json` (graph name `agent`, `node_version` 22). Confirm the license
-   check passes and the graph is reachable. **This step is unresearched; expect it to be the
-   slowest.**
-2. Wire Langfuse (§4); confirm traces arrive.
-3. Build the proxy (§2); confirm a valid Google token authenticates, an invalid one is
-   rejected, another user's thread ID is rejected, and SSE streams through incrementally.
-4. Update `mobile/src/services/langgraph.ts` — drop `x-api-key`, point at the proxy.
-5. Rebuild the app, verify end to end, then decommission the LangGraph Cloud deployment.
-6. Only then revoke the old LangSmith token (§8) — the Cloud deployment still runs on it.
-
-## 8. Security cleanup — reduced urgency
-
-The `lsv2_pt_…` token in the old build was **never distributed**. There is no TestFlight
-build of this app; the only on-device copy is on the developer's own phone, and the only
-readable copies are 42 files across two Xcode DerivedData trees on the developer's Mac.
-Zero third-party exposure.
-
-That makes rotation ordinary hygiene rather than incident response — do it at the end of §7,
-not before. Then:
+### 3.1 Dependencies
 
 ```bash
-rm -rf ~/Library/Developer/Xcode/DerivedData/Troli-ghlpiihpfixhffgejjoboaucrarh
-rm -rf ~/Library/Developer/Xcode/DerivedData/Aisist-dkerlysmrrzteihbquxdpylvxclf
+pnpm --filter @aisist/backend add @langfuse/langchain @langfuse/otel @opentelemetry/sdk-node
 ```
 
-The architectural fix in §2 is what actually matters, and self-hosting is what makes it
-achievable.
+**Security floor:** `@langchain/langgraph` must be ≥ 1.4.12 and
+`@langchain/langgraph-checkpoint` ≥ 1.1.4 —
+[GHSA-j87f-x5h5-gr75](https://github.com/langchain-ai/langgraphjs/security/advisories/GHSA-j87f-x5h5-gr75)
+(insecure deserialization in `JsonPlusSerializer`, CVSS 7.7) allows arbitrary code
+execution when a checkpoint containing attacker-crafted structured data (e.g.
+`additional_kwargs`) is restored. Auth is not a mitigation — an authorized caller can
+plant the payload — so never downgrade below these versions. The langgraph-cli 1.4.x
+line ships the matching patched dev-server harness.
 
-## Open questions
+### 3.2 `backend/src/agent.ts`
 
-These block implementation and need a human answer.
+Two additions (shape below — confirm exact API against the Langfuse v4 docs when
+implementing):
 
-- **What hosts the server, and how does the phone reach the proxy** — public TLS endpoint,
-  Tailscale, or LAN-only? Determines how exposed the proxy is and whether it needs rate
-  limiting (see the cost-abuse item in `docs/plans/phase-1.md:72`).
-- **Langfuse Cloud or self-hosted Langfuse?** Affects `LANGFUSE_HOST` and whether there is a
-  second service to operate.
-- **Is the proxy a third workspace package in this repo, or a separate service?** In-repo
-  makes sharing `AISIST_NAMESPACE` and the auth helpers straightforward; separate keeps the
-  deployable smaller.
-- **Does `validateGoogleToken` get refactored to take a raw token** instead of a
-  `LangGraphRunnableConfig`, so both the graph and the proxy can call it? That is the
-  cleanest reuse, but it touches `backend/src/agent.ts:80` and its tests.
+```ts
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { LangfuseSpanProcessor } from '@langfuse/otel';
+import { CallbackHandler } from '@langfuse/langchain';
+
+// module scope — runs once per server worker
+if (process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY) {
+  new NodeSDK({ spanProcessors: [new LangfuseSpanProcessor()] }).start();
+}
+
+export const graph = workflow.compile().withConfig({
+  callbacks: [new CallbackHandler()],
+});
+```
+
+Today the last line is `export const graph = workflow.compile();`. Without keys set, the
+handler's spans hit a no-op tracer — local dev without Langfuse still works. Do **not**
+wire a checkpointer into the compiled graph; the server injects its own (that's what its
+Postgres is for).
+
+The handler/processor read `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
+`LANGFUSE_BASE_URL`, and `LANGFUSE_TRACING_ENVIRONMENT` from env. Per-user/session
+attribution in traces (userId, sessionId from run metadata) is a later upgrade — get
+plain traces flowing first.
+
+### 3.3 Env files
+
+`backend/.env.example` — remove `LANGSMITH_ENDPOINT` and `LANGSMITH_PROJECT`, flip
+tracing off, add Langfuse:
+
+```bash
+GOOGLE_API_KEY=
+LANGSMITH_API_KEY=            # standalone-server license only — tracing stays off
+LANGSMITH_TRACING=false
+LANGFUSE_PUBLIC_KEY=
+LANGFUSE_SECRET_KEY=
+LANGFUSE_BASE_URL=            # dev: http://localhost:3000 tunnel or leave unset
+LANGFUSE_TRACING_ENVIRONMENT=dev
+```
+
+`LANGSMITH_TRACING=false` matters: the built-in LangChain tracer is env-driven with no
+code references, so this is the whole off-switch. Mirror the same shape in `backend/.env`
+(gitignored).
+
+### 3.4 Keep `.env` out of the image
+
+`langgraph.json` has `dependencies: ["."]`, so the build context is all of `backend/` —
+including `backend/.env` if you build where it exists. Add `backend/.dockerignore`:
+
+```
+.env
+node_modules
+```
+
+(The desktop builds from a fresh clone with no `.env`, so this is a backstop, but a cheap
+one.)
+
+### 3.5 Local dev loop
+
+```bash
+pnpm --filter @aisist/backend dev        # langgraphjs dev, in-memory persistence
+curl -s http://localhost:2024/ok
+```
+
+Optionally point the phone dev client at `http://<mac-ip>:2024` to smoke-test on-device
+before the desktop exists. Then `pnpm -r run typecheck && pnpm -r run test` — the
+`withConfig` change should not disturb the existing 121 backend / 100 mobile tests, but
+confirm.
+
+## 4. Phase 2 — Desktop deployment (Ubuntu WSL, as `services`)
+
+Everything below runs as the `services` user unless marked **[Windows]**. Enter with
+`sudo -iu services` (`-i` matters: full login shell, correct `$HOME`).
+
+### 4.1 Toolchain + repo
+
+```bash
+# SSH deploy key — Option B distro has no Windows credential access
+ssh-keygen -t ed25519 -C "desktop-services"
+cat ~/.ssh/id_ed25519.pub        # add as read-only deploy key on the GitHub repo
+
+# Node 22 + pnpm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+source ~/.bashrc
+nvm install 22
+corepack enable && corepack prepare pnpm@latest --activate
+
+git clone git@github.com:<you>/aisist.git ~/apps/aisist
+cd ~/apps/aisist && pnpm install
+```
+
+Clone into the Linux filesystem (`~/apps`) — on this distro `/mnt/c` doesn't exist
+anyway.
+
+### 4.2 Log caps for the rootless daemon
+
+```bash
+mkdir -p ~/.config/docker
+cat > ~/.config/docker/daemon.json <<'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+EOF
+systemctl --user restart docker    # briefly bounces Langfuse; it self-heals
+```
+
+### 4.3 Build the image
+
+```bash
+cd ~/apps/aisist/backend
+npx @langchain/langgraph-cli build -t aisist-backend:latest
+```
+
+The CLI pulls the latest `langgraphjs-api` base image by default — do **not** pass
+`--no-pull`: the server runtime inside the base image has its own copy of the checkpoint
+serializer and must also carry the GHSA-j87f-x5h5-gr75 patch (§3.1).
+
+If the container later fails on DB config, inspect what the generated image expects:
+`npx @langchain/langgraph-cli dockerfile -` from `backend/`.
+
+### 4.4 Shared network → Langfuse
+
+```bash
+docker network create agents-shared
+```
+
+In `~/langfuse/docker-compose.yml`, add at top level:
+
+```yaml
+networks:
+  agents-shared:
+    external: true
+```
+
+and under the web service (name it exactly as `docker compose ps` shows — usually
+`langfuse-web`):
+
+```yaml
+networks:
+  - default
+  - agents-shared
+```
+
+Apply with `cd ~/langfuse && docker compose up -d`. This is why
+`LANGFUSE_BASE_URL=http://langfuse-web:3000` resolves from inside the aisist container,
+sidestepping rootless Docker's host-loopback limitations.
+
+### 4.5 Deploy config
+
+Deployment lives outside the repo checkout so `git pull` never touches it.
+
+`~/apps/aisist-deploy/docker-compose.yml`:
+
+```yaml
+name: aisist
+networks:
+  agents-shared:
+    external: true
+services:
+  api:
+    image: aisist-backend:latest
+    restart: always
+    ports:
+      - '127.0.0.1:8123:8000'
+    env_file: .env
+    environment:
+      REDIS_URI: redis://redis:6379
+      DATABASE_URI: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/aisist?sslmode=disable
+      POSTGRES_URI: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/aisist?sslmode=disable
+    networks:
+      - default
+      - agents-shared
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+  postgres:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_DB: aisist
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7
+    restart: always
+volumes:
+  pgdata:
+```
+
+`DATABASE_URI` is the documented variable; `POSTGRES_URI` is set too because server
+versions have differed on which they read — the extra one is ignored.
+
+`~/apps/aisist-deploy/.env`, then `chmod 600 .env`:
+
+```bash
+POSTGRES_PASSWORD=<openssl rand -hex 24>
+LANGSMITH_API_KEY=<langsmith key>       # license only
+LANGSMITH_TRACING=false                 # keep traces out of LangSmith cloud
+GOOGLE_API_KEY=<gemini key>
+LANGFUSE_PUBLIC_KEY=<pk from self-hosted Langfuse project "aisist">
+LANGFUSE_SECRET_KEY=<sk from same>
+LANGFUSE_BASE_URL=http://langfuse-web:3000
+LANGFUSE_TRACING_ENVIRONMENT=prod
+```
+
+Create the `aisist` project in the Langfuse UI first and copy its keys.
+
+### 4.6 First boot + local verification
+
+```bash
+cd ~/apps/aisist-deploy
+docker compose up -d
+docker compose logs -f api          # wait for migrations + license check, then Ctrl+C
+curl -s http://localhost:8123/ok    # → {"ok":true}
+
+# Langfuse reachability from inside the container
+docker compose exec api sh -c \
+  "wget -qO- http://langfuse-web:3000/api/public/health || echo FAIL"
+```
+
+Then drive a real run with the repo's verify script (it reads `LANGGRAPH_API_URL` /
+`LANGGRAPH_API_KEY`; Lite ignores the key but the script requires a value):
+
+```bash
+cd ~/apps/aisist
+LANGGRAPH_API_URL=http://localhost:8123 \
+LANGGRAPH_API_KEY=unused \
+GOOGLE_ACCESS_TOKEN=<token> GOOGLE_ACCOUNT_EMAIL=<test-email> \
+pnpm --filter @aisist/backend run verify:cloud
+```
+
+After it passes, check both tracing outcomes: the run appears in Langfuse
+(`environment=prod`), and nothing new appears in the LangSmith cloud dashboard.
+
+### 4.7 Publish over Tailscale — [Windows]
+
+443 stays with Langfuse. Elevated PowerShell:
+
+```powershell
+tailscale serve --bg --https=8445 http://localhost:8123
+```
+
+(If the syntax complains, check `tailscale serve --help` — it changed between versions.)
+
+**ACLs:** the tailnet ACLs enumerate ports, so add 8445 to what phone/Mac may reach on
+the desktop — otherwise the next test fails and looks like a server bug.
+
+Test from the phone on cellular with Tailscale on:
+`https://<desktop>.<tailnet>.ts.net:8445/ok` → `{"ok":true}`. Then confirm it does NOT
+load from a non-tailnet device.
+
+## 5. Phase 3 — Point the app at it
+
+`mobile/.env` (and matching `.env.example` comments):
+
+```bash
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=<unchanged>
+EXPO_PUBLIC_LANGGRAPH_API_URL=https://<desktop>.<tailnet>.ts.net:8445
+EXPO_PUBLIC_LANGGRAPH_API_KEY=unused    # client requires non-empty; Lite ignores it
+EXPO_PUBLIC_LANGGRAPH_ASSISTANT_ID=agent
+```
+
+No mobile code changes: the client keeps sending `x-api-key` (harmlessly ignored), the
+SSE path (`mobile/src/services/sse.ts`) is talking to the same server API, and the
+existing tests asserting the header stay valid. Dropping the header entirely happens in
+the VPS phase.
+
+Rebuild the Expo dev build, then smoke test: send a message → response streams; kill and
+reopen the app → thread rehydrates from the server.
+
+## 6. Phase 4 — Acceptance checklist
+
+- [ ] `docker compose ps` in `~/apps/aisist-deploy`: three services running
+- [ ] `curl localhost:8123/ok` inside Ubuntu → ok
+- [ ] `https://<desktop>.<tailnet>.ts.net:8445/ok` from phone on cellular → ok
+- [ ] `verify:cloud` passes against `localhost:8123` (and optionally the ts.net URL from the Mac)
+- [ ] Mobile smoke test: stream + rehydrate
+- [ ] A phone-initiated run appears in Langfuse with `environment=prod`
+- [ ] Nothing new appears in LangSmith cloud
+- [ ] **Reboot test:** reboot Windows, log in (manual login is by design), touch nothing
+      else; after ~2 minutes the `/ok` URL answers from the phone on cellular. Linger +
+      the scheduled task + `restart: always` should need zero further intervention.
+
+## 7. Phase 5 — Decommission and cleanup
+
+Only after the checklist passes:
+
+1. Delete the LangGraph Cloud deployment (`https://troli-<hash>.us.langgraph.app`).
+2. Revoke the LangSmith personal token that shipped in the old mobile env; if it's the
+   same key now used as the server license, rotate it instead and update the deploy
+   `.env`. Ordinary hygiene, not incident response — the old token was never distributed
+   (no TestFlight; only the dev phone and local Xcode build products).
+3. Clear stale build products on the Mac:
+   ```bash
+   rm -rf ~/Library/Developer/Xcode/DerivedData/Troli-* ~/Library/Developer/Xcode/DerivedData/Aisist-*
+   ```
+
+## 8. Later phase — OCI VPS front door + auth proxy
+
+Deferred, but designed now so nothing this phase conflicts with it. When the app needs to
+work off-tailnet (TestFlight testers, public launch):
+
+- A free OCI instance joins the tailnet (desktop guide step 10) and is the only public
+  surface, on 443. Tailnet ACLs let it reach the desktop on exactly 8445 (and 443 if it
+  ingests to Langfuse).
+- It runs a thin HTTP proxy in front of this same endpoint. The mobile client then ships
+  **no** API key — only the Google access token it already holds, as a Bearer header.
+  Per endpoint, the proxy must:
+  - `POST /threads` — validate the token (tokeninfo), derive the thread ID from the
+    email, reject any client-supplied mismatch.
+  - `GET /threads/{id}`, `GET /threads/{id}/state` — verify `{id}` equals
+    `uuidv5(email, AISIST_NAMESPACE)`. This closes the currently-open endpoints.
+  - `POST /threads/{id}/runs/stream` — same thread check, plus **rewrite**
+    `config.configurable.access_token` to the token the proxy validated (never forward
+    the client's value unchecked), and stream SSE through without buffering — a naive
+    read-then-return breaks the typing indicator.
+- Open questions that only matter then: proxy as a third workspace package vs separate
+  service (in-repo makes sharing `AISIST_NAMESPACE` + auth helpers easy); whether
+  `validateGoogleToken` gets refactored to take a raw token instead of a
+  `LangGraphRunnableConfig` so graph and proxy share it (touches
+  `backend/src/utils/auth.ts` and its 12 tests); rate limiting at the proxy; per-user
+  attribution in Langfuse traces.
+
+## 9. Collateral to update alongside
+
+- **`docs/DEPLOY.md`** — documents the LangGraph Cloud rollout; rewrite for this path or
+  retire it in favor of this doc's §4.
+- **`docs/TRD.md`** — architecture and auth-model sections change.
+- **`docs/plans/phase-1.md:68-74`** — record the shared-key exposure as closed for the
+  tailnet phase (key is now inert), with the proxy as the condition for going public.
+- **`backend/scripts/verify-langgraph-cloud.mjs`** — works as-is against the self-hosted
+  server (§4.6); consider renaming `verify:cloud` later, not load-bearing.
+- **Tests** — no changes required this phase. `mobile/src/services/__tests__/langgraph.test.ts`
+  still asserts `x-api-key`, which the client still sends.
+- Root-level `aisist-full-setup.md` and `gaming-desktop-server-setup.md` — the app-facing
+  content now lives here; keep the desktop guide for infra reference, delete or archive
+  the full-setup file.
+
+## 10. Troubleshooting
+
+| Symptom                                        | Likely cause / fix                                                                                                                                                                                              |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Container exits: "License verification failed" | `LANGSMITH_API_KEY` missing/invalid in deploy `.env`, or no egress to beacon.langchain.com — never a code problem                                                                                               |
+| api crash-loops on DB errors                   | URI var mismatch — both `DATABASE_URI` and `POSTGRES_URI` are set in §4.5; if still failing, inspect the generated Dockerfile (§4.3)                                                                            |
+| Runs work, no traces in Langfuse               | Keys/`LANGFUSE_BASE_URL` unset in deploy `.env`; OTel processor not initialized (§3.2); or the v3-package `LANGFUSE_BASEURL` trap if the wrong SDK got installed. Then check the §4.6 in-container health probe |
+| Traces appear in LangSmith cloud               | `LANGSMITH_TRACING=false` missing from deploy `.env`                                                                                                                                                            |
+| Unreachable from phone, fine on desktop        | Phone VPN off, ACL missing 8445, or serve not persisted (`--bg`)                                                                                                                                                |
+| `localhost:8123` dead, containers running      | WSL localhost relay went stale — `wsl --shutdown` from PowerShell, reopen Ubuntu, `docker compose up -d`                                                                                                        |
+| Unreachable after reboot                       | Not logged in yet (manual login is by design), or the keep-alive scheduled task didn't fire — check Task Scheduler history                                                                                      |
+| Build/install fails weirdly as `services`      | Wrong `$HOME` — enter with `sudo -iu services`; nvm must be installed for that user                                                                                                                             |
+| Everything slow                                | Repo not under `~/apps` on the Linux filesystem                                                                                                                                                                 |
+
+## 11. Maintenance
+
+- **Deploy a change:** `cd ~/apps/aisist && git pull && pnpm install && cd backend &&
+npx @langchain/langgraph-cli build -t aisist-backend:latest && cd ~/apps/aisist-deploy
+&& docker compose up -d api`
+- **Backups** (once threads stop being test data):
+  `docker compose exec postgres pg_dump -U postgres aisist | gzip > backup-$(date +%F).sql.gz`
+- **Monthly:** `sudo apt update && sudo apt upgrade`; `docker compose pull && docker
+compose up -d` per compose dir; `wsl --update` from PowerShell; Windows reboot on your
+  schedule after Patch Tuesday.
+- **Disk:** `docker system prune` after a few image rebuilds.
+- **Next app on the box:** own repo under `~/apps/<app>`, own deploy dir + postgres, next
+  host port (8124…), join `agents-shared` if it traces, `tailscale serve --bg
+--https=<8446…>`, ACL update, own Langfuse project.
