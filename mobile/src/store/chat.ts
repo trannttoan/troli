@@ -108,7 +108,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         errorMessage:
           error instanceof Error
             ? error.message
-            : 'Unable to bootstrap the Troli thread.',
+            : 'Unable to bootstrap the Aisist thread.',
         isBootstrapping: false,
         threadId,
       });
@@ -301,7 +301,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const errorMessage =
         error instanceof Error
           ? error.message
-          : 'Unable to send your message to Troli.';
+          : 'Unable to send your message to Aisist.';
 
       set({
         errorMessage,

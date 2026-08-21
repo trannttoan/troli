@@ -42,7 +42,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @troli/backend test
+      - run: pnpm --filter @aisist/backend test
 
   test-mobile:
     runs-on: ubuntu-latest
@@ -54,4 +54,4 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @troli/mobile test
+      - run: pnpm --filter @aisist/mobile test

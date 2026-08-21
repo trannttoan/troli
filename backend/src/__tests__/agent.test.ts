@@ -7,7 +7,7 @@ import {
 } from '@langchain/langgraph';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TroliAuthError } from '../utils/auth.js';
+import { AisistAuthError } from '../utils/auth.js';
 import { fetchWithAuth } from '../utils/google-api.js';
 import { generateThreadId } from '../utils/thread.js';
 import { getMessageTimestamp, stampMessage } from '../utils/timestamp.js';
@@ -123,7 +123,7 @@ describe('agent graph', () => {
 
     it('rejects when token validation fails', async () => {
       vi.mocked(validateGoogleToken).mockRejectedValue(
-        new TroliAuthError('AUTH_INVALID_TOKEN', 'bad token', {
+        new AisistAuthError('AUTH_INVALID_TOKEN', 'bad token', {
           retryable: false,
           status: 401,
         }),
@@ -136,7 +136,7 @@ describe('agent graph', () => {
 
     it('rejects when thread authorization fails', async () => {
       vi.mocked(verifyThreadAuthorization).mockImplementation(() => {
-        throw new TroliAuthError('AUTH_THREAD_MISMATCH', 'wrong thread', {
+        throw new AisistAuthError('AUTH_THREAD_MISMATCH', 'wrong thread', {
           retryable: false,
           status: 403,
         });

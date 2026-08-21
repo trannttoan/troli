@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  TroliAuthError,
-  isTroliAuthError,
+  AisistAuthError,
+  isAisistAuthError,
   validateGoogleToken,
   verifyThreadAuthorization,
 } from '../auth.js';
@@ -62,7 +62,7 @@ describe('validateGoogleToken', () => {
           access_token: 'expired-token',
         },
       }),
-    ).rejects.toMatchObject<TroliAuthError>({
+    ).rejects.toMatchObject<AisistAuthError>({
       code: 'AUTH_INVALID_TOKEN',
       retryable: false,
       status: 401,
@@ -85,7 +85,7 @@ describe('validateGoogleToken', () => {
           access_token: 'bad-payload',
         },
       }),
-    ).rejects.toMatchObject<TroliAuthError>({
+    ).rejects.toMatchObject<AisistAuthError>({
       code: 'AUTH_INVALID_TOKEN',
       retryable: false,
       status: 401,
@@ -103,7 +103,7 @@ describe('validateGoogleToken', () => {
           access_token: 'valid-token',
         },
       }),
-    ).rejects.toMatchObject<TroliAuthError>({
+    ).rejects.toMatchObject<AisistAuthError>({
       code: 'AUTH_TOKENINFO_UNAVAILABLE',
       retryable: true,
       status: 503,
@@ -121,7 +121,7 @@ describe('validateGoogleToken', () => {
           access_token: 'valid-token',
         },
       }),
-    ).rejects.toMatchObject<TroliAuthError>({
+    ).rejects.toMatchObject<AisistAuthError>({
       code: 'AUTH_TOKENINFO_UNAVAILABLE',
       retryable: true,
       status: 503,
@@ -137,7 +137,7 @@ describe('validateGoogleToken', () => {
           access_token: 'valid-token',
         },
       }),
-    ).rejects.toMatchObject<TroliAuthError>({
+    ).rejects.toMatchObject<AisistAuthError>({
       code: 'AUTH_TOKENINFO_UNAVAILABLE',
       retryable: true,
       status: 503,
@@ -147,7 +147,7 @@ describe('validateGoogleToken', () => {
   it('throws when the access token is missing from the config', async () => {
     await expect(
       validateGoogleToken({ configurable: {} }),
-    ).rejects.toMatchObject<TroliAuthError>({
+    ).rejects.toMatchObject<AisistAuthError>({
       code: 'AUTH_MISSING_ACCESS_TOKEN',
       retryable: false,
       status: 401,
@@ -155,18 +155,18 @@ describe('validateGoogleToken', () => {
   });
 });
 
-describe('isTroliAuthError', () => {
-  it('returns true for TroliAuthError instances', () => {
-    const error = new TroliAuthError('AUTH_INVALID_TOKEN', 'test', {
+describe('isAisistAuthError', () => {
+  it('returns true for AisistAuthError instances', () => {
+    const error = new AisistAuthError('AUTH_INVALID_TOKEN', 'test', {
       retryable: false,
       status: 401,
     });
 
-    expect(isTroliAuthError(error)).toBe(true);
+    expect(isAisistAuthError(error)).toBe(true);
   });
 
   it('returns false for plain Error instances', () => {
-    expect(isTroliAuthError(new Error('test'))).toBe(false);
+    expect(isAisistAuthError(new Error('test'))).toBe(false);
   });
 });
 

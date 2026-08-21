@@ -63,7 +63,7 @@ export function ChatScreen() {
       <SafeAreaView edges={['bottom']} style={styles.screen}>
         <View style={styles.centerCard}>
           <Text style={styles.eyebrow}>Chat backend not configured</Text>
-          <Text style={styles.title}>Troli</Text>
+          <Text style={styles.title}>Aisist</Text>
           <Text style={styles.body}>
             Add the LangGraph Cloud URL and API key before testing the mobile
             chat flow.
@@ -98,7 +98,7 @@ export function ChatScreen() {
             <ActivityIndicator color="#1f5c4a" size="large" />
             <Text style={styles.loadingTitle}>Bootstrapping your thread</Text>
             <Text style={styles.loadingBody}>
-              Troli is creating or reconnecting to your single persistent chat.
+              Aisist is creating or reconnecting to your single persistent chat.
             </Text>
           </View>
         ) : (

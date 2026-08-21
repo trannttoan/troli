@@ -311,7 +311,7 @@ describe('useAuthStore', () => {
     expect(resetChatState).toHaveBeenCalledTimes(1);
     expect(authStore.useAuthStore.getState()).toMatchObject({
       errorMessage:
-        'Troli now needs calendar and tasks access. Please sign in again.',
+        'Aisist now needs calendar and tasks access. Please sign in again.',
       status: 'signed_out',
     });
 
@@ -349,7 +349,7 @@ describe('useAuthStore', () => {
     expect(resetChatState).toHaveBeenCalledTimes(1);
     expect(authStore.useAuthStore.getState()).toMatchObject({
       errorMessage:
-        'Troli now needs calendar and tasks access. Please sign in again.',
+        'Aisist now needs calendar and tasks access. Please sign in again.',
       status: 'signed_out',
     });
 

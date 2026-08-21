@@ -1,4 +1,4 @@
-import { TroliAuthError } from './auth.js';
+import { AisistAuthError } from './auth.js';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
@@ -53,7 +53,7 @@ export async function fetchWithAuth<T>(
     });
 
     if (response.status === 401) {
-      throw new TroliAuthError(
+      throw new AisistAuthError(
         'AUTH_INVALID_TOKEN',
         'Google access token is invalid or expired. Sign in again.',
         {
@@ -91,7 +91,7 @@ export async function fetchWithAuth<T>(
 
     return parseJsonResponse<T>(response);
   } catch (error) {
-    if (error instanceof TroliAuthError || error instanceof GoogleApiError) {
+    if (error instanceof AisistAuthError || error instanceof GoogleApiError) {
       throw error;
     }
 

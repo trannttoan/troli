@@ -15,7 +15,7 @@ export function SignInScreen() {
     return (
       <View style={styles.screen}>
         <View style={styles.card}>
-          <Text style={styles.title}>Troli</Text>
+          <Text style={styles.title}>Aisist</Text>
           <Text style={styles.subtitle}>
             Add `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` to `mobile/.env` before
             testing sign-in.
@@ -113,7 +113,7 @@ function ConfiguredSignInScreen() {
     <View style={styles.screen}>
       <View style={styles.card}>
         <Text style={styles.eyebrow}>Phase 1</Text>
-        <Text style={styles.title}>Troli</Text>
+        <Text style={styles.title}>Aisist</Text>
         <Text style={styles.subtitle}>
           Sign in with Google to unlock your single persistent chat thread.
         </Text>

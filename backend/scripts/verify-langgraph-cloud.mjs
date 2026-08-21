@@ -1,7 +1,7 @@
 import process from 'node:process';
 import { v5 as uuidv5 } from 'uuid';
 
-const TROLI_NAMESPACE = 'e587b8a0-3e1a-4c5d-9f2b-1a8c4d6e7f90';
+const AISIST_NAMESPACE = 'e587b8a0-3e1a-4c5d-9f2b-1a8c4d6e7f90';
 const DEFAULT_ASSISTANT_ID = 'agent';
 const DEFAULT_MESSAGE = 'Say hello in one short sentence.';
 const DEFAULT_TIMEZONE =
@@ -17,7 +17,7 @@ async function main() {
   const message = process.env.LANGGRAPH_TEST_MESSAGE?.trim() || DEFAULT_MESSAGE;
   const timezone = process.env.LANGGRAPH_TIMEZONE?.trim() || DEFAULT_TIMEZONE;
   const threadId =
-    process.env.LANGGRAPH_THREAD_ID?.trim() || uuidv5(email, TROLI_NAMESPACE);
+    process.env.LANGGRAPH_THREAD_ID?.trim() || uuidv5(email, AISIST_NAMESPACE);
 
   await createThread({ apiKey, apiUrl, threadId });
 

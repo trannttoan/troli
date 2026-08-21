@@ -111,7 +111,7 @@ export async function buildSessionFromAuthResponse(
   if (missingScopes.length > 0) {
     throw new GoogleAuthError(
       'insufficient_scope',
-      'Troli needs calendar and tasks access to work. Please sign in again and grant all permissions.',
+      'Aisist needs calendar and tasks access to work. Please sign in again and grant all permissions.',
       true,
     );
   }
