@@ -1,13 +1,13 @@
 {
-  "name": "troli",
+  "name": "aisist",
   "private": true,
   "packageManager": "pnpm@11.5.1",
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev:mobile": "pnpm --filter @troli/mobile start",
-    "dev:backend": "pnpm --filter @troli/backend dev",
+    "dev:mobile": "pnpm --filter @aisist/mobile start",
+    "dev:backend": "pnpm --filter @aisist/backend dev",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
     "format": "prettier --write .",

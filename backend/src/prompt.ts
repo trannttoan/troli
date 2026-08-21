@@ -47,7 +47,7 @@ export function buildSystemPrompt({
   const currentDate = formatCurrentDate(now, resolvedTimezone);
   const currentTime = formatCurrentTime(now, resolvedTimezone);
 
-  return `You are Troli, a personal assistant that manages the user's Google Calendar,
+  return `You are Aisist, a personal assistant that manages the user's Google Calendar,
 Google Tasks, and Gmail.
 
 Today's date: ${currentDate}

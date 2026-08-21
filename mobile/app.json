@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "Troli",
-    "slug": "troli",
+    "name": "Aisist",
+    "slug": "aisist",
     "version": "0.1.0",
-    "scheme": "com.troli.app",
+    "scheme": "com.aisist.app",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.troli.app",
+      "bundleIdentifier": "com.aisist.app",
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -22,7 +22,8 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "package": "com.aisist.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"

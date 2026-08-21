@@ -1,4 +1,4 @@
-# Product Requirements Document — Troli
+# Product Requirements Document — Aisist
 
 **Version:** 1.0 (Draft)
 **Status:** Draft
@@ -9,7 +9,7 @@
 
 ## 1. Overview
 
-Troli is an iOS app that connects to a user's Google Calendar, Google Tasks, and Gmail through a single conversational interface. Instead of switching between three apps and tapping through menus, the user just says what they need and the agent does the work.
+Aisist is an iOS app that connects to a user's Google Calendar, Google Tasks, and Gmail through a single conversational interface. Instead of switching between three apps and tapping through menus, the user just says what they need and the agent does the work.
 
 The agent reads and writes calendar events and tasks, reads Gmail messages, and keeps the user in control by asking for approval before modifying or deleting anything.
 
@@ -32,7 +32,7 @@ Make it fast and natural to manage your day through conversation. One app, one t
 
 ## 3. Target Users and Distribution
 
-Troli is initially built for personal use by the developer. Early testing will use Google OAuth in test mode (up to 100 test users, no verification required). The eventual goal is a public App Store release.
+Aisist is initially built for personal use by the developer. Early testing will use Google OAuth in test mode (up to 100 test users, no verification required). The eventual goal is a public App Store release.
 
 | Phase              | Details                                                                                                                                                                                                                                               |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -43,7 +43,7 @@ Troli is initially built for personal use by the developer. Early testing will u
 
 ## 4. Google API Permissions
 
-Troli requests the narrowest scopes possible while supporting all v1.0 operations.
+Aisist requests the narrowest scopes possible while supporting all v1.0 operations.
 
 | Service  | Scope                   | Classification | Permits                                       |
 | -------- | ----------------------- | -------------- | --------------------------------------------- |
@@ -241,7 +241,7 @@ Signing out clears authentication tokens. Conversation history is retained so it
 | --- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | 1   | AWS or LangGraph Cloud?                | Start with LangGraph Cloud for v1.0. Migrate to AWS when scaling up.                                                           |
 | 2   | Single thread or multiple threads?     | Single continuous thread per user. Keep past 7 days of messages in the LLM's context window.                                   |
-| 3   | App name?                              | Troli                                                                                                                          |
+| 3   | App name?                              | Aisist                                                                                                                         |
 | 4   | HITL edit option for updates?          | Deferred to post-v1.0. Form fields is the planned approach.                                                                    |
 | 5   | What happens when old messages expire? | In v1.0, old messages simply fall out of the LLM's context window. Agent memory (persistent profile) is deferred to post-v1.0. |
 

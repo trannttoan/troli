@@ -47,7 +47,7 @@ This means:
 
 - **Graph architecture**: Uses custom `StateGraph` with `AgentState` annotation (not `createReactAgent`). Two channels: `messages` (persisted, uses `messagesStateReducer`) and `llmInputMessages` (ephemeral, overwritten each run). Preprocess node handles auth + timestamping + windowing.
 - **Auth flow**: Access token passed via `config.configurable.access_token` — never stored. Token validated against Google tokeninfo. Thread ID verified against UUIDv5 derived from email.
-- **Error handling**: Custom `TroliAuthError` class with `code`, `retryable`, `status` fields.
+- **Error handling**: Custom `AisistAuthError` class with `code`, `retryable`, `status` fields.
 - **Testing**: Vitest, `vi.mock()` for modules, `vi.spyOn(Date, 'now')` for time. Mocked LLM returns via `vi.fn()`.
 - **Module resolution**: ESM with `.js` extensions in imports.
 - **Model**: `ChatGoogleGenerativeAI` with `gemini-3.1-flash-lite`, `temperature: 0`.
@@ -58,7 +58,7 @@ This means:
 - **SSE handling**: Custom parser in `services/sse.ts`. Events parsed in `streamRun()` — `onAssistantTextSnapshot` callback for streaming text, `onEvent` for raw events.
 - **Message model**: `ChatMessage` type with `id`, `role`, `text`, `status?`, `timestamp?`. Streaming messages have `status: 'streaming'`.
 - **UI patterns**: Warm earth-tone palette (#1f5c4a green, #f4f1ea cream, #fffdf8 white). `StyleSheet.create()`, `Pressable` with `pressed` opacity.
-- **Thread ID**: Deterministic UUIDv5 from email using shared `TROLI_NAMESPACE` (both backend and mobile).
+- **Thread ID**: Deterministic UUIDv5 from email using shared `AISIST_NAMESPACE` (both backend and mobile).
 
 ### LangGraph HITL conventions (from TRD)
 
@@ -87,7 +87,7 @@ The current graph has two state channels:
 Current scopes (`mobile/src/utils/auth.ts:8-12`): `openid`, `userinfo.email`, `userinfo.profile`.
 Missing: `https://www.googleapis.com/auth/calendar.events.owned`.
 
-Without this scope, all calendar API calls will 403. Existing signed-in users must re-consent. Since the app already uses `prompt: 'consent'`, a sign-out/sign-in cycle works. The simplest approach: store the scopes that were used for the current session, and on app launch, if stored scopes don't include the new one, force sign-out with a clear message ("Troli now needs calendar access. Please sign in again.").
+Without this scope, all calendar API calls will 403. Existing signed-in users must re-consent. Since the app already uses `prompt: 'consent'`, a sign-out/sign-in cycle works. The simplest approach: store the scopes that were used for the current session, and on app launch, if stored scopes don't include the new one, force sign-out with a clear message ("Aisist now needs calendar access. Please sign in again.").
 
 ### 3. LangGraph `interrupt()` behavior
 
@@ -189,7 +189,7 @@ Key files to read for planning: `backend/src/agent.ts`, `mobile/src/services/lan
 
 #### 1.2 — fetchWithAuth helper
 
-- **Description**: Create a shared `fetchWithAuth(url, init, accessToken)` helper for Google API calls. Sets `Authorization: Bearer` header, parses JSON response, throws typed errors for 401 (invalid token), 403 (insufficient scope), 429 (rate limit), and network failures. Reuses `TroliAuthError` pattern for auth errors.
+- **Description**: Create a shared `fetchWithAuth(url, init, accessToken)` helper for Google API calls. Sets `Authorization: Bearer` header, parses JSON response, throws typed errors for 401 (invalid token), 403 (insufficient scope), 429 (rate limit), and network failures. Reuses `AisistAuthError` pattern for auth errors.
 - **Files involved**: `backend/src/utils/google-api.ts` (create), `backend/src/utils/__tests__/google-api.test.ts` (create)
 - **Prerequisites**: None
 - **Acceptance criteria**: Unit tests cover: successful JSON response, 401/403/429 error mapping, network error handling. ESM import with `.js` extension works.
@@ -205,7 +205,7 @@ Key files to read for planning: `backend/src/agent.ts`, `mobile/src/services/lan
 
 #### 1.4 — OAuth scope expansion + scope mismatch detection
 
-- **Description**: Add `https://www.googleapis.com/auth/calendar.events.owned` to `GOOGLE_SCOPES` in mobile. Store granted scopes in SecureStore alongside the session. On `initialize()`, if stored scopes don't include all current `GOOGLE_SCOPES`, force sign-out with message "Troli now needs calendar access. Please sign in again."
+- **Description**: Add `https://www.googleapis.com/auth/calendar.events.owned` to `GOOGLE_SCOPES` in mobile. Store granted scopes in SecureStore alongside the session. On `initialize()`, if stored scopes don't include all current `GOOGLE_SCOPES`, force sign-out with message "Aisist now needs calendar access. Please sign in again."
 - **Files involved**: `mobile/src/utils/auth.ts` (modify), `mobile/src/store/auth.ts` (modify), `mobile/src/__tests__/store/auth.test.ts` (modify or create)
 - **Prerequisites**: None (can run in parallel with 1.1–1.3)
 - **Acceptance criteria**: `GOOGLE_SCOPES` includes the calendar scope. Scope mismatch test: stored session with old scopes → `initialize()` triggers sign-out with reason message. Matching scopes → proceeds normally.

@@ -16,7 +16,7 @@ type AuthErrorCode =
   | 'AUTH_THREAD_MISMATCH'
   | 'AUTH_TOKENINFO_UNAVAILABLE';
 
-export class TroliAuthError extends Error {
+export class AisistAuthError extends Error {
   readonly code: AuthErrorCode;
   readonly retryable: boolean;
   readonly status: number;
@@ -33,15 +33,15 @@ export class TroliAuthError extends Error {
     },
   ) {
     super(message);
-    this.name = 'TroliAuthError';
+    this.name = 'AisistAuthError';
     this.code = code;
     this.retryable = retryable;
     this.status = status;
   }
 }
 
-export function isTroliAuthError(error: unknown): error is TroliAuthError {
-  return error instanceof TroliAuthError;
+export function isAisistAuthError(error: unknown): error is AisistAuthError {
+  return error instanceof AisistAuthError;
 }
 
 export async function validateGoogleToken(
@@ -69,7 +69,7 @@ export async function validateGoogleToken(
     );
 
     if (response.status >= 500) {
-      throw new TroliAuthError(
+      throw new AisistAuthError(
         'AUTH_TOKENINFO_UNAVAILABLE',
         'Google token validation is temporarily unavailable. Retry the request.',
         {
@@ -80,7 +80,7 @@ export async function validateGoogleToken(
     }
 
     if (response.status >= 400) {
-      throw new TroliAuthError(
+      throw new AisistAuthError(
         'AUTH_INVALID_TOKEN',
         'Google access token is invalid or expired. Sign in again.',
         {
@@ -97,7 +97,7 @@ export async function validateGoogleToken(
     };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new TroliAuthError(
+      throw new AisistAuthError(
         'AUTH_TOKENINFO_UNAVAILABLE',
         'Google token validation timed out. Retry the request.',
         {
@@ -108,7 +108,7 @@ export async function validateGoogleToken(
     }
 
     if (error instanceof z.ZodError) {
-      throw new TroliAuthError(
+      throw new AisistAuthError(
         'AUTH_INVALID_TOKEN',
         'Google token validation response was missing a valid email.',
         {
@@ -118,11 +118,11 @@ export async function validateGoogleToken(
       );
     }
 
-    if (error instanceof TroliAuthError) {
+    if (error instanceof AisistAuthError) {
       throw error;
     }
 
-    throw new TroliAuthError(
+    throw new AisistAuthError(
       'AUTH_TOKENINFO_UNAVAILABLE',
       'Google token validation failed due to a transient error. Retry the request.',
       {
@@ -148,7 +148,7 @@ export function verifyThreadAuthorization(
   const expectedThreadId = generateThreadId(email);
 
   if (threadId !== expectedThreadId) {
-    throw new TroliAuthError(
+    throw new AisistAuthError(
       'AUTH_THREAD_MISMATCH',
       'Thread ID does not match the authenticated user.',
       {
@@ -175,7 +175,7 @@ function getRequiredConfigurableString(
   const value = configurable?.[key];
 
   if (typeof value !== 'string' || value.trim() === '') {
-    throw new TroliAuthError(error.code, error.message, {
+    throw new AisistAuthError(error.code, error.message, {
       retryable: error.retryable,
       status: error.status,
     });

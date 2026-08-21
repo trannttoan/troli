@@ -59,10 +59,10 @@ describe('buildSystemPrompt', () => {
     expect(result).toContain("User's timezone: UTC");
   });
 
-  it('contains the Troli identity preamble', () => {
+  it('contains the Aisist identity preamble', () => {
     const result = buildSystemPrompt({ now: fixedNow });
 
-    expect(result).toContain('You are Troli, a personal assistant');
+    expect(result).toContain('You are Aisist, a personal assistant');
   });
 
   it('contains the rules section', () => {

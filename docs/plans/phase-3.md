@@ -57,7 +57,7 @@ No hard blockers beyond the scope expansion — everything else is additive.
 ### Backend (established in Phase 2 — follow exactly)
 
 - **Tool shape**: `tool(async (input, config) => string, { name, description, schema })` from `@langchain/core/tools`. Tools return formatted strings, never raw JSON. IDs included as `(id: ...)` for the agent's use but the system prompt forbids showing them to users.
-- **Auth**: `getAccessToken(config)` reads `config.configurable.access_token`, throws `TroliAuthError('AUTH_MISSING_ACCESS_TOKEN', ...)` when absent. Currently private to `calendar.ts` — extract to a shared util rather than duplicating (see Slice 1).
+- **Auth**: `getAccessToken(config)` reads `config.configurable.access_token`, throws `AisistAuthError('AUTH_MISSING_ACCESS_TOKEN', ...)` when absent. Currently private to `calendar.ts` — extract to a shared util rather than duplicating (see Slice 1).
 - **HTTP**: All Google calls go through `fetchWithAuth<T>(url, init, accessToken)` (`backend/src/utils/google-api.ts`). It already handles empty bodies (calendar DELETE), and maps 401/403/429 to typed errors.
 - **Missing resources**: Calendar treats 404/410 as "already gone" (`isMissingResourceStatus`). For Tasks, handle 404 the same way; also handle Tasks' soft-delete flag (`deleted: true` on the resource) — verify actual API behavior at implementation time rather than assuming parity with Calendar.
 - **HITL contract**: `interrupt<Payload, 'approve' | 'reject'>({ action, description, current, proposed })`. Update tools pass a `current` snapshot + `proposed` diff; delete tools pass `proposed: null`. Non-approve decisions return a cancellation string ("Update cancelled." / "Deletion cancelled.").

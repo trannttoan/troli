@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { interrupt } from '@langchain/langgraph';
 
-import { TroliAuthError } from '../../utils/auth.js';
+import { AisistAuthError } from '../../utils/auth.js';
 import { fetchWithAuth, GoogleApiError } from '../../utils/google-api.js';
 
 vi.mock('@langchain/langgraph', async (importOriginal) => {
@@ -170,7 +170,7 @@ describe('listCalendarEvents', () => {
   it('rejects when the access token is missing from the run config', async () => {
     await expect(
       listCalendarEvents.invoke({}, {}),
-    ).rejects.toMatchObject<TroliAuthError>({
+    ).rejects.toMatchObject<AisistAuthError>({
       code: 'AUTH_MISSING_ACCESS_TOKEN',
       retryable: false,
       status: 401,
@@ -295,7 +295,7 @@ describe('getCalendarEvent', () => {
   it('rejects when the access token is missing from the run config', async () => {
     await expect(
       getCalendarEvent.invoke({ eventId: 'abc' }, {}),
-    ).rejects.toMatchObject<TroliAuthError>({
+    ).rejects.toMatchObject<AisistAuthError>({
       code: 'AUTH_MISSING_ACCESS_TOKEN',
       retryable: false,
       status: 401,
@@ -1347,7 +1347,7 @@ describe('deleteCalendarEvent', () => {
   it('rejects when the access token is missing from the run config', async () => {
     await expect(
       deleteCalendarEvent.invoke({ eventId: 'event-9' }, {}),
-    ).rejects.toMatchObject<TroliAuthError>({
+    ).rejects.toMatchObject<AisistAuthError>({
       code: 'AUTH_MISSING_ACCESS_TOKEN',
       retryable: false,
       status: 401,

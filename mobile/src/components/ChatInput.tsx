@@ -36,7 +36,7 @@ export function ChatInput({ disabled = false, onSend }: ChatInputProps) {
         onSubmitEditing={() => {
           void handleSend();
         }}
-        placeholder="Ask Troli anything about your day."
+        placeholder="Ask Aisist anything about your day."
         placeholderTextColor="#8d8377"
         returnKeyType="send"
         style={[styles.input, disabled ? styles.inputDisabled : null]}

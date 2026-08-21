@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TroliAuthError } from '../auth.js';
+import { AisistAuthError } from '../auth.js';
 import { GoogleApiError, fetchWithAuth } from '../google-api.js';
 
 describe('fetchWithAuth', () => {
@@ -52,7 +52,7 @@ describe('fetchWithAuth', () => {
     expect(headers.get('x-test-header')).toBe('present');
   });
 
-  it('maps 401 responses to TroliAuthError', async () => {
+  it('maps 401 responses to AisistAuthError', async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ error: 'invalid_token' }), {
         headers: {
@@ -68,7 +68,7 @@ describe('fetchWithAuth', () => {
         {},
         'expired-token',
       ),
-    ).rejects.toMatchObject<TroliAuthError>({
+    ).rejects.toMatchObject<AisistAuthError>({
       code: 'AUTH_INVALID_TOKEN',
       retryable: false,
       status: 401,

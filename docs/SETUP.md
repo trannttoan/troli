@@ -7,7 +7,7 @@ Manual setup steps for Google Cloud and LangSmith. Follow in order.
 ## 1. Google Cloud Project
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create a new project — name it **Troli**
+2. Create a new project — name it **Aisist**
 3. Note the project ID (you'll need it later)
 
 ## 2. Enable APIs
@@ -25,7 +25,7 @@ Go to **APIs & Services > OAuth consent screen**:
 
 1. Select **External** user type
 2. Fill in:
-   - App name: **Troli**
+   - App name: **Aisist**
    - User support email: your email
    - Developer contact email: your email
 3. Add scopes:
@@ -42,8 +42,8 @@ Go to **APIs & Services > Credentials**:
 
 1. Click **Create credentials > OAuth client ID**
 2. Application type: **iOS**
-3. Name: **Troli iOS**
-4. Bundle ID: `com.troli.app`
+3. Name: **Aisist iOS**
+4. Bundle ID: `com.aisist.app`
 5. Save and copy the **client ID**
 6. Put it in `/mobile/.env`:
    ```
@@ -62,14 +62,14 @@ Go to **APIs & Services > Credentials**:
 ## 6. LangSmith
 
 1. Go to [LangSmith](https://smith.langchain.com)
-2. Create a new project named **troli-v1**
+2. Create a new project named **aisist-v1**
 3. Go to **Settings > API Keys > Create API Key**
 4. Put it in `/backend/.env`:
    ```
    LANGSMITH_API_KEY=<your-api-key>
    ```
 
-The other LangSmith env vars (`LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT=troli-v1`) are already in `.env.example`.
+The other LangSmith env vars (`LANGSMITH_TRACING=true`, `LANGSMITH_PROJECT=aisist-v1`) are already in `.env.example`.
 
 ## 7. LangGraph Cloud Deploy
 
@@ -79,16 +79,19 @@ After local backend and mobile development are working, follow [DEPLOY.md](DEPLO
 
 ## Verification Checklist
 
+Unchecked items were invalidated by the Troli → Aisist rename — see
+[RENAME-MIGRATION.md](RENAME-MIGRATION.md).
+
 - [x] GCP project created
 - [x] Google Calendar API enabled
 - [x] Google Tasks API enabled
 - [x] Gmail API enabled
 - [x] Generative Language API (Gemini) enabled
-- [x] OAuth consent screen configured (external, testing mode)
+- [ ] OAuth consent screen configured (external, testing mode)
 - [x] Test user added
-- [x] iOS OAuth client ID created with bundle ID `com.troli.app`
+- [ ] iOS OAuth client ID created with bundle ID `com.aisist.app`
 - [x] Gemini API key created
-- [x] LangSmith project `troli-v1` created
+- [ ] LangSmith project `aisist-v1` created
 - [x] LangSmith API key created
 - [x] `/backend/.env` populated from `.env.example`
 - [x] `/mobile/.env` populated from `.env.example`

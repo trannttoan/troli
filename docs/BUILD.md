@@ -1,4 +1,4 @@
-# Build Plan — Troli v1.0
+# Build Plan — Aisist v1.0
 
 **Companion docs:** [PRD](PRD.md) | [TRD](TRD.md)
 
@@ -11,7 +11,7 @@ Set up both projects with tooling and infrastructure. No features yet.
 - **Mobile:** Init Expo managed project (TypeScript). Install core deps: `expo-auth-session`, `expo-secure-store`, `expo-crypto`, `zustand`, `expo-localization`.
 - **Backend:** Init LangGraph.js project (TypeScript). Install deps: `@langchain/langgraph`, `@langchain/core`, `@langchain/google-genai`, `@langgraphjs/toolkit`, `zod`. Configure `langgraph.json` for LangGraph Cloud deployment. The LLM provider is swappable via LangChain's `BaseChatModel` interface — install `@langchain/openai` or `@langchain/anthropic` as alternatives without refactoring.
 - **Google Cloud:** Create project, enable Calendar/Tasks/Gmail APIs, configure OAuth consent screen (external, test mode), create iOS OAuth client ID.
-- **Observability:** Set up LangSmith project (`troli-v1`), wire `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` env vars.
+- **Observability:** Set up LangSmith project (`aisist-v1`), wire `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` env vars.
 
 ---
 
@@ -20,9 +20,9 @@ Set up both projects with tooling and infrastructure. No features yet.
 One thin path end-to-end: sign in → send message → agent responds → see it stream in chat. Proves the entire architecture works before adding breadth.
 
 - **Auth:** Google OAuth with PKCE via `expo-auth-session`. Token storage in `expo-secure-store`. Silent refresh with 5-minute buffer and promise-based mutex.
-- **Thread bootstrap:** On first login, client creates a thread via `POST /threads` using the deterministic ID `troli-{sha256(email)}`. On subsequent launches, client hydrates the chat by fetching thread state via `GET /threads/{thread_id}` and rendering existing messages before the user sends anything. Client persists the thread ID locally alongside auth tokens.
+- **Thread bootstrap:** On first login, client creates a thread via `POST /threads` using the deterministic ID `aisist-{sha256(email)}`. On subsequent launches, client hydrates the chat by fetching thread state via `GET /threads/{thread_id}` and rendering existing messages before the user sends anything. Client persists the thread ID locally alongside auth tokens.
 - **Chat UI:** Minimal chat screen — flat message list (user right, agent left), text input bar with send button, SSE streaming of agent tokens, typing indicator.
-- **Backend:** Bare agent graph with system prompt (no tools). Accept messages via `POST /threads/{id}/runs/stream`, return SSE stream. Thread ID derived from `troli-{sha256(email)}`.
+- **Backend:** Bare agent graph with system prompt (no tools). Accept messages via `POST /threads/{id}/runs/stream`, return SSE stream. Thread ID derived from `aisist-{sha256(email)}`.
 - **Conversation model:** Timestamp all messages at creation time. Implement 7-day message window filter + 200-message hard cap as a preprocessing node in the graph. This validates the real conversation model from day one, even before tools generate meaningful history.
 - **Wiring:** Client sends Google access token + device timezone with each request. Backend validates token via Google tokeninfo endpoint and checks thread authorization.
 - **Deploy:** First LangGraph Cloud deployment. Confirm mobile → backend → LLM → SSE → mobile round-trip works on a real device.

@@ -1,6 +1,6 @@
 import { LangGraphRunnableConfig } from '@langchain/langgraph';
 
-import { TroliAuthError } from './auth.js';
+import { AisistAuthError } from './auth.js';
 
 export function getAccessToken(config: LangGraphRunnableConfig): string {
   const configurable = config.configurable as
@@ -9,7 +9,7 @@ export function getAccessToken(config: LangGraphRunnableConfig): string {
   const accessToken = configurable?.access_token;
 
   if (typeof accessToken !== 'string' || accessToken.trim() === '') {
-    throw new TroliAuthError(
+    throw new AisistAuthError(
       'AUTH_MISSING_ACCESS_TOKEN',
       'Missing Google access token in run config.',
       {

@@ -17,7 +17,7 @@ function HeaderTitle() {
 
   return (
     <View style={styles.headerTitleWrap}>
-      <Text style={styles.headerTitle}>Troli</Text>
+      <Text style={styles.headerTitle}>Aisist</Text>
       <Text numberOfLines={1} style={styles.headerEmail}>
         {email ?? 'Unknown account'}
       </Text>

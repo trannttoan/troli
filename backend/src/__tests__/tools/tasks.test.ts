@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { TroliAuthError } from '../../utils/auth.js';
+import { AisistAuthError } from '../../utils/auth.js';
 import { fetchWithAuth } from '../../utils/google-api.js';
 
 vi.mock('../../utils/google-api.js', async (importOriginal) => {
@@ -110,7 +110,7 @@ describe('listTaskLists', () => {
   it('rejects when the access token is missing from the run config', async () => {
     await expect(
       listTaskLists.invoke({}, { configurable: {} }),
-    ).rejects.toThrow(TroliAuthError);
+    ).rejects.toThrow(AisistAuthError);
     expect(fetchWithAuth).not.toHaveBeenCalled();
   });
 });
