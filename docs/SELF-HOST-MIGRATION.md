@@ -418,14 +418,14 @@ reopen the app → thread rehydrates from the server.
 
 ## 6. Phase 4 — Acceptance checklist
 
-- [ ] `docker compose ps` in `~/apps/aisist-deploy`: three services running
-- [ ] `curl localhost:8123/ok` inside Ubuntu → ok
-- [ ] `https://<desktop>.<tailnet>.ts.net:8445/ok` from phone on cellular → ok
-- [ ] `verify:cloud` passes against `localhost:8123` (and optionally the ts.net URL from the Mac)
-- [ ] Mobile smoke test: stream + rehydrate
-- [ ] A phone-initiated run appears in Langfuse with `environment=prod`
-- [ ] Nothing new appears in LangSmith cloud
-- [ ] **Reboot test:** reboot Windows, log in (manual login is by design), touch nothing
+- [x] `docker compose ps` in `~/apps/aisist-deploy`: three services running
+- [x] `curl localhost:8123/ok` inside Ubuntu → ok
+- [x] `https://<desktop>.<tailnet>.ts.net:8445/ok` from phone on cellular → ok
+- [x] `verify:cloud` passes against `localhost:8123` (and optionally the ts.net URL from the Mac)
+- [x] Mobile smoke test: stream + rehydrate
+- [x] A phone-initiated run appears in Langfuse with `environment=prod`
+- [x] Nothing new appears in LangSmith cloud
+- [x] **Reboot test:** reboot Windows, log in (manual login is by design), touch nothing
       else; after ~2 minutes the `/ok` URL answers from the phone on cellular. Linger +
       the scheduled task + `restart: always` should need zero further intervention.
 
