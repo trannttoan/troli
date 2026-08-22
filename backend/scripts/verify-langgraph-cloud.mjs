@@ -3,6 +3,9 @@ import { v5 as uuidv5 } from 'uuid';
 
 const AISIST_NAMESPACE = 'e587b8a0-3e1a-4c5d-9f2b-1a8c4d6e7f90';
 const DEFAULT_ASSISTANT_ID = 'agent';
+// Cloud emits role "assistant"; the self-hosted server emits LangChain-serialized
+// messages with type "ai" / "AIMessageChunk".
+const ASSISTANT_ROLES = new Set(['assistant', 'ai', 'AIMessageChunk']);
 const DEFAULT_MESSAGE = 'Say hello in one short sentence.';
 const DEFAULT_TIMEZONE =
   Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Detroit';
@@ -67,7 +70,9 @@ async function main() {
   }
 
   if (!summary.assistantText.trim()) {
-    throw new Error('LangGraph SSE stream completed without assistant output.');
+    throw new Error(
+      `LangGraph SSE stream completed without assistant output (events seen: ${[...summary.seenEvents].join(', ')}).`,
+    );
   }
 
   console.log(`assistant_id=${assistantId}`);
@@ -119,6 +124,7 @@ async function consumeSseStream(response) {
   let buffer = '';
   let sawEvent = false;
   let assistantText = '';
+  const seenEvents = new Set();
 
   for await (const chunk of response.body) {
     buffer += decoder.decode(chunk, { stream: true }).replace(/\r\n/g, '\n');
@@ -139,7 +145,12 @@ async function consumeSseStream(response) {
         continue;
       }
 
+      if (event.event === 'error') {
+        throw new Error(`LangGraph run errored: ${event.data}`);
+      }
+
       sawEvent = true;
+      seenEvents.add(event.event);
       assistantText = mergeAssistantText(
         assistantText,
         extractAssistantText(event.data),
@@ -150,14 +161,19 @@ async function consumeSseStream(response) {
   const trailingEvent = parseSseEvent(buffer.trim());
 
   if (trailingEvent?.data && trailingEvent.data !== '[DONE]') {
+    if (trailingEvent.event === 'error') {
+      throw new Error(`LangGraph run errored: ${trailingEvent.data}`);
+    }
+
     sawEvent = true;
+    seenEvents.add(trailingEvent.event);
     assistantText = mergeAssistantText(
       assistantText,
       extractAssistantText(trailingEvent.data),
     );
   }
 
-  return { assistantText, sawEvent };
+  return { assistantText, sawEvent, seenEvents };
 }
 
 function parseSseEvent(rawEvent) {
@@ -226,7 +242,8 @@ function collectAssistantText(payload, assistantContext = false) {
   }
 
   const role = getRole(payload);
-  const nextAssistantContext = assistantContext || role === 'assistant';
+  const nextAssistantContext =
+    assistantContext || ASSISTANT_ROLES.has(role ?? '');
   const fragments = [];
 
   if (nextAssistantContext) {
