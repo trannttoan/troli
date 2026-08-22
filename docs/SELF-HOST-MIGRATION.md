@@ -101,8 +101,9 @@ extractable-token problem this migration closes.
 startup with `LANGSMITH_API_KEY` and needs egress to `https://beacon.langchain.com` for
 license verification ([docs](https://docs.langchain.com/langsmith/deploy-standalone-server)).
 `LANGGRAPH_CLOUD_LICENSE_KEY` is the enterprise variant — only reach for it if startup
-demands it (**verify at first boot**; free-tier key alone is expected to work, with a
-node-execution cap on the free plan). "License verification failed" in container logs is
+demands it (confirmed at first boot: the server logs `running in lite mode with LangSmith API
+key` and starts — that warning is the healthy state, not a problem; a node-execution
+cap applies on the free plan). "License verification failed" in container logs is
 always env config, never code. The key now lives server-side, never in a mobile bundle.
 
 **Langfuse via the v4 JS SDK.** The backend is on `@langchain/core` 1.x; LangChain v1
@@ -360,9 +361,9 @@ docker compose up -d
 docker compose logs -f api          # wait for migrations + license check, then Ctrl+C
 curl -s http://localhost:8123/ok    # → {"ok":true}
 
-# Langfuse reachability from inside the container
-docker compose exec api sh -c \
-  "wget -qO- http://langfuse-web:3000/api/public/health || echo FAIL"
+# Langfuse reachability from inside the container (no wget/curl in the image)
+docker compose exec api node -e \
+  "fetch('http://langfuse-web:3000/api/public/health').then(r=>r.text()).then(t=>console.log('OK',t)).catch(e=>console.error('ERR',e.cause?.code||e.message))"
 ```
 
 Then drive a real run with the repo's verify script (it reads `LANGGRAPH_API_URL` /
